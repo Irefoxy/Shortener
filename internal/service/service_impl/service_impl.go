@@ -31,7 +31,7 @@ func (s *ServiceImpl) init() *gin.Engine {
 	r := gin.Default()
 	r.Use(s.errorMiddleware)
 	r.GET("/*id", s.handleRedirect)
-	r.POST("/", s.handleUrl)
+	r.POST("/", s.checkRequest, s.handleUrl)
 
 	return r
 }

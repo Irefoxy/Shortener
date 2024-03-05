@@ -8,6 +8,20 @@ import (
 	"strings"
 )
 
+func (s *ServiceImpl) checkRequest(c *gin.Context) {
+	defer func() {
+		if len(c.Errors) > 0 {
+			c.Abort()
+		}
+	}()
+	if c.Request.Body == nil {
+		c.Error(errors.New("empty body")).SetType(gin.ErrorTypePublic)
+	}
+	if contentType := c.GetHeader("Content-Type"); contentType != "text/plain" {
+		c.Error(errors.New("wrong content-type")).SetType(gin.ErrorTypePublic)
+	}
+}
+
 func (s *ServiceImpl) handleUrl(c *gin.Context) {
 	data, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -15,22 +29,17 @@ func (s *ServiceImpl) handleUrl(c *gin.Context) {
 		return
 	}
 	request := string(data)
-	v, ok := s.repo.Get(request)
-	if ok {
-		c.String(201, "text/plain", "http://"+"localhost:8888"+"/"+v)
-		return
-	}
-	new_url, err := s.engine.Get(request)
+	newUrl, err := s.engine.Get(request)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	err = s.repo.Set(new_url, request)
+	err = s.repo.Set(newUrl, request)
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	c.String(201, "http://%s/%s", "localhost:8888", new_url)
+	c.String(201, "http://%s/%s", "localhost:8888", newUrl) // TODO conf reader?
 }
 
 func (s *ServiceImpl) handleRedirect(c *gin.Context) {
@@ -41,7 +50,7 @@ func (s *ServiceImpl) handleRedirect(c *gin.Context) {
 		c.Redirect(http.StatusTemporaryRedirect, v)
 		return
 	}
-	c.Error(errors.New("No such short url"))
+	c.Error(errors.New("no such short url")).SetType(gin.ErrorTypePublic)
 }
 
 func (s *ServiceImpl) errorMiddleware(c *gin.Context) {
@@ -49,9 +58,9 @@ func (s *ServiceImpl) errorMiddleware(c *gin.Context) {
 	if len(c.Errors) > 0 {
 		switch c.Errors[0].Type {
 		case gin.ErrorTypePublic:
-			c.JSON(-1, gin.H{"error": c.Errors[0].Error()})
+			c.String(400, "Error: %s", c.Errors[0].Error())
 		default:
-			c.JSON(-1, gin.H{"error": "Something went wrong"})
+			c.String(http.StatusInternalServerError, "Error: Something went wrong")
 		}
 	}
 }

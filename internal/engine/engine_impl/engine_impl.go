@@ -17,15 +17,19 @@ func New() *HashImpl {
 }
 
 func (_ *HashImpl) Get(url string) (string, error) {
+	writer := strings.Builder{}
+
 	tab := crc64.MakeTable(crc64.ECMA)
 	hash := crc64.New(tab)
-	writer := strings.Builder{}
 	encoder := base64.NewEncoder(base64.StdEncoding, &writer)
-	_, err := hash.Write([]byte(url))
-	if err != nil {
+	defer encoder.Close()
+
+	if _, err := hash.Write([]byte(url)); err != nil {
 		return "", err
 	}
 	result := hash.Sum(nil)
-	_, err = encoder.Write(result)
-	return writer.String(), err
+	if _, err := encoder.Write(result); err != nil {
+		return "", err
+	}
+	return writer.String(), nil
 }
