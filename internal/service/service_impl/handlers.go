@@ -3,9 +3,11 @@ package service_impl
 import (
 	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func (s *ServiceImpl) checkRequest(c *gin.Context) {
@@ -39,7 +41,7 @@ func (s *ServiceImpl) handleUrl(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	c.String(201, "http://%s/%s", "localhost:8888", newUrl) // TODO conf reader?
+	c.String(201, "http://%s/%s", s.cfg.GetTargetAddress(), newUrl)
 }
 
 func (s *ServiceImpl) handleRedirect(c *gin.Context) {
@@ -63,4 +65,24 @@ func (s *ServiceImpl) errorMiddleware(c *gin.Context) {
 			c.String(http.StatusInternalServerError, "Error: Something went wrong")
 		}
 	}
+}
+
+func (s *ServiceImpl) requestLoggerMiddleware(c *gin.Context) {
+	startTime := time.Now()
+	c.Next()
+	duration := time.Since(startTime)
+
+	s.logger.WithFields(logrus.Fields{
+		"method":   c.Request.Method,
+		"uri":      c.Request.RequestURI,
+		"duration": duration,
+	}).Info("request handled")
+}
+
+func (s *ServiceImpl) responseLoggerMiddleware(c *gin.Context) {
+	c.Next()
+	s.logger.WithFields(logrus.Fields{
+		"status": c.Writer.Status(),
+		"size":   c.Writer.Size(),
+	}).Info("response handled")
 }
