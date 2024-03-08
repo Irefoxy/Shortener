@@ -36,6 +36,7 @@ func (s *ServiceImpl) init() *gin.Engine {
 	r.Use(s.errorMiddleware)
 	r.GET("/*id", s.responseLoggerMiddleware, s.handleRedirect)
 	r.POST("/", s.requestLoggerMiddleware, s.checkRequest, s.handleUrl)
+	r.POST("/shorten", s.checkRequest, s.handleJsonUrl)
 
 	return r
 }
