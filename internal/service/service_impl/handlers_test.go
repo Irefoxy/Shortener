@@ -10,6 +10,7 @@ import (
 	"testing"
 )
 
+// add init
 type MockRepo struct {
 	mock.Mock
 }

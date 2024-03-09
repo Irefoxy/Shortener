@@ -7,3 +7,8 @@ type URL struct {
 type Result struct {
 	Result string `json:"result"`
 }
+
+type Conf struct {
+	HostAddress   string
+	TargetAddress string
+}

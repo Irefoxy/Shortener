@@ -2,11 +2,10 @@ package app
 
 import (
 	"Yandex/internal/conf"
-	"Yandex/internal/conf/config_impl"
 	"Yandex/internal/engine"
 	"Yandex/internal/engine/engine_impl"
 	"Yandex/internal/repo"
-	"Yandex/internal/repo/repo_impl"
+	"Yandex/internal/repo/in_memory"
 	"Yandex/internal/service"
 	"Yandex/internal/service/service_impl"
 	"github.com/sirupsen/logrus"
@@ -15,7 +14,7 @@ import (
 
 type Provider struct {
 	logger *logrus.Logger
-	cfg    conf.Config
+	cfg    *conf.ConfigImpl
 	srv    service.Service
 	repo   repo.Repo
 	engine engine.Engine
@@ -23,7 +22,7 @@ type Provider struct {
 
 func (p *Provider) Service() service.Service {
 	if p.srv == nil {
-		p.srv = service_impl.New(p.Repo(), p.Engine(), p.Config(), p.Logger())
+		p.srv = service_impl.New(p.Repo(), p.Engine(), p.Config().GetServiceConf(), p.Logger())
 	}
 	return p.srv
 }
@@ -42,7 +41,7 @@ func (p *Provider) Logger() *logrus.Logger {
 
 func (p *Provider) Repo() repo.Repo {
 	if p.repo == nil {
-		p.repo = repo_impl.New()
+		p.repo = in_memory.New(p.Config().GetFileLocation())
 	}
 	return p.repo
 }
@@ -54,9 +53,9 @@ func (p *Provider) Engine() engine.Engine {
 	return p.engine
 }
 
-func (p *Provider) Config() conf.Config {
+func (p *Provider) Config() *conf.ConfigImpl {
 	if p.cfg == nil {
-		p.cfg = config_impl.New()
+		p.cfg = conf.New()
 	}
 	return p.cfg
 }
