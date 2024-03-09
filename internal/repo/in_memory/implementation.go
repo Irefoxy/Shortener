@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"strings"
 )
 
 type Implementation struct {
@@ -37,7 +38,6 @@ func (i *Implementation) Init() error {
 }
 
 func readFile(f *os.File) (map[string]string, error) {
-	var data []models.StorageUnit
 	result := make(map[string]string)
 	bytes, err := io.ReadAll(f)
 	if err != nil {
@@ -46,11 +46,16 @@ func readFile(f *os.File) (map[string]string, error) {
 	if len(bytes) == 0 {
 		return result, nil
 	}
-	if err := json.Unmarshal(bytes, &data); err != nil {
-		return nil, err
-	}
-	for _, unit := range data {
-		result[unit.Short] = unit.Original
+	str := strings.Split(string(bytes), "\n")
+	for _, line := range str {
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+		var data models.StorageUnit
+		if err := json.Unmarshal([]byte(line), &data); err != nil {
+			return nil, err
+		}
+		result[data.Short] = data.Original
 	}
 	return result, nil
 }

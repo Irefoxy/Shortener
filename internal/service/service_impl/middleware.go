@@ -61,7 +61,17 @@ func (s *ServiceImpl) checkRequest(c *gin.Context) {
 	if c.Request.Body == nil {
 		c.AbortWithError(http.StatusBadRequest, errors.New("empty body")).SetType(gin.ErrorTypePublic)
 	}
-	if contentType := c.GetHeader("Content-Type"); contentType != "text/plain" && c.Request.RequestURI != "/shorten" || contentType != "application/json" {
+	if contentType := c.GetHeader("Content-Type"); !checkContent(contentType, c) {
 		c.AbortWithError(http.StatusBadRequest, errors.New("wrong content-type")).SetType(gin.ErrorTypePublic)
 	}
+}
+
+func checkContent(contentType string, c *gin.Context) bool {
+	if contentType == "text/plain" && c.Request.RequestURI == "/" {
+		return true
+	}
+	if contentType == "application/json" && c.Request.RequestURI == "/shorten" {
+		return true
+	}
+	return false
 }
