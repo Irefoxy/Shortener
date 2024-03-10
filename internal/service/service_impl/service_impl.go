@@ -73,10 +73,10 @@ func (s *ServiceImpl) Stop() {
 func (s *ServiceImpl) init() *gin.Engine {
 	r := gin.Default()
 	r.Use(s.errorMiddleware, s.unzipMiddleware, gzip.Gzip(gzip.DefaultCompression))
-	r.GET("/ping", s.responseLoggerMiddleware, s.handlePing)
-	r.GET("/*id", s.responseLoggerMiddleware, s.handleRedirect)
-	r.POST("/", s.requestLoggerMiddleware, s.checkRequest, s.handleUrl)
-	r.POST("/shorten", s.checkRequest, s.handleJsonUrl)
+	r.GET("/*id", s.responseLoggerMiddleware, s.handleWildcard)
+	r.POST("/", s.requestLoggerMiddleware, checkRequest, s.handleUrl)
+	r.POST("/shorten", checkRequest, s.handleJsonUrl)
+	r.POST("/shorten/batch", checkRequest, s.handleJsonBatch)
 
 	return r
 }

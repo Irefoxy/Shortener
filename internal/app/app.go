@@ -6,6 +6,7 @@ import (
 	"Yandex/internal/engine/engine_impl"
 	"Yandex/internal/repo"
 	"Yandex/internal/repo/in_memory"
+	"Yandex/internal/repo/postgres"
 	"Yandex/internal/service"
 	"Yandex/internal/service/service_impl"
 	"github.com/sirupsen/logrus"
@@ -41,7 +42,11 @@ func (p *Provider) Logger() *logrus.Logger {
 
 func (p *Provider) Repo() repo.Repo {
 	if p.repo == nil {
-		p.repo = in_memory.New(p.Config().GetFileLocation())
+		if p.Config().GetDatabaseString() == "" {
+			p.repo = in_memory.New(p.Config().GetFileLocation())
+		} else {
+			p.repo = postgres.New(p.Config().GetDatabaseString())
+		}
 	}
 	return p.repo
 }

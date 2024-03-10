@@ -6,11 +6,13 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 )
 
 type Implementation struct {
 	data map[string]string
 	info models.FileInfo
+	mu   sync.RWMutex
 }
 
 func New(name string) *Implementation {
@@ -23,6 +25,9 @@ func New(name string) *Implementation {
 }
 
 func (i *Implementation) Init() error {
+	if i.info.Name == "" {
+		return nil
+	}
 	f, err := os.OpenFile(i.info.Name, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
 		return err
@@ -60,24 +65,31 @@ func readFile(f *os.File) (map[string]string, error) {
 	return result, nil
 }
 
-func (i *Implementation) Get(hash string) (string, bool) {
-	v, ok := i.data[hash]
-	return v, ok
+func (i *Implementation) Get(hash string) (string, error) {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	if v, ok := i.data[hash]; ok {
+		return v, nil
+	}
+	return "", nil
 }
 
 func (i *Implementation) Set(hash, url string) error {
-	if _, ok := i.data[hash]; !ok {
-		err := i.info.Encoder.Encode(models.StorageUnit{
-			Uuid:     len(i.data) + 1,
-			Short:    hash,
-			Original: url,
-		})
-		if err != nil {
-			return err
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.info.Encoder != nil {
+		if _, ok := i.data[hash]; !ok {
+			err := i.info.Encoder.Encode(models.StorageUnit{
+				Uuid:     len(i.data) + 1,
+				Short:    hash,
+				Original: url,
+			})
+			if err != nil {
+				return err
+			}
 		}
 	}
 	i.data[hash] = url
-
 	return nil
 }
 

@@ -1,7 +1,7 @@
 package repo
 
 type Repo interface {
-	Get(hash string) (string, bool)
+	Get(hash string) (string, error)
 	Set(hash, utl string) error
 	Init() error
 	Close() error

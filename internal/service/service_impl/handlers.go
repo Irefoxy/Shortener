@@ -42,8 +42,12 @@ func (s *ServiceImpl) processUri(c *gin.Context, request string) (string, bool) 
 func (s *ServiceImpl) handleRedirect(c *gin.Context) {
 	param := c.Param("id")
 	id := strings.TrimPrefix(param, "/")
-	v, ok := s.repo.Get(id)
-	if ok {
+	v, err := s.repo.Get(id)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if v != "" {
 		c.Redirect(http.StatusTemporaryRedirect, v)
 		return
 	}
@@ -51,17 +55,40 @@ func (s *ServiceImpl) handleRedirect(c *gin.Context) {
 }
 
 func (s *ServiceImpl) handleJsonUrl(c *gin.Context) {
-	decoder := json.NewDecoder(c.Request.Body)
-	var request = service.URL{}
-	if err := decoder.Decode(&request); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
+	request := processJson[service.URL](c)
 	newUrl, done := s.processUri(c, request.Url)
 	if !done {
 		return
 	}
-	c.JSON(http.StatusOK, service.Result{Result: newUrl})
+	c.JSON(http.StatusOK, service.Response{Result: newUrl})
+}
+
+func (s *ServiceImpl) handleJsonBatch(c *gin.Context) {
+	requests := processJson[[]service.BatchUrl](c)
+	var responses []service.BatchResponse
+	for _, request := range requests {
+		newUrl, done := s.processUri(c, request.Original)
+		if !done {
+			continue
+		}
+		responses = append(responses, service.BatchResponse{
+			Id:    request.Id,
+			Short: newUrl,
+		})
+	}
+	if len(responses) == 0 {
+		return
+	}
+	c.JSON(http.StatusOK, responses)
+}
+
+func processJson[T any](c *gin.Context) (request T) {
+	decoder := json.NewDecoder(c.Request.Body)
+	if err := decoder.Decode(&request); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	return
 }
 
 func (s *ServiceImpl) handlePing(c *gin.Context) {

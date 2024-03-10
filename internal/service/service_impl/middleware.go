@@ -57,7 +57,7 @@ func (s *ServiceImpl) responseLoggerMiddleware(c *gin.Context) {
 	}).Info("response handled")
 }
 
-func (s *ServiceImpl) checkRequest(c *gin.Context) {
+func checkRequest(c *gin.Context) {
 	if c.Request.Body == nil {
 		c.AbortWithError(http.StatusBadRequest, errors.New("empty body")).SetType(gin.ErrorTypePublic)
 	}
@@ -70,8 +70,17 @@ func checkContent(contentType string, c *gin.Context) bool {
 	if contentType == "text/plain" && c.Request.RequestURI == "/" {
 		return true
 	}
-	if contentType == "application/json" && c.Request.RequestURI == "/shorten" {
+	if contentType == "application/json" && (c.Request.RequestURI == "/shorten" || c.Request.RequestURI == "/shorten/batch") {
 		return true
 	}
 	return false
+}
+
+func (s *ServiceImpl) handleWildcard(c *gin.Context) {
+	path := c.Param("id")
+	if path == "/ping" {
+		s.handlePing(c)
+	} else {
+		s.handleUrl(c)
+	}
 }
