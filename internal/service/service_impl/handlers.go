@@ -22,7 +22,7 @@ func (s *ServiceImpl) handleUrl(c *gin.Context) {
 	if !done {
 		return
 	}
-	c.String(201, "http://%s/%s", s.cfg.TargetAddress, newUrl)
+	c.String(-1, "http://%s/%s", s.cfg.TargetAddress, newUrl)
 }
 
 func (s *ServiceImpl) processUri(c *gin.Context, request string) (string, bool) {
@@ -33,9 +33,14 @@ func (s *ServiceImpl) processUri(c *gin.Context, request string) (string, bool) 
 	}
 	err = s.repo.Set(newUrl, request)
 	if err != nil {
+		if err.Error() == "CONFLICT" { // TODO add normal error checker
+			c.Status(http.StatusConflict)
+			return newUrl, true
+		}
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return "", false
 	}
+	c.Status(http.StatusCreated)
 	return newUrl, true
 }
 
@@ -60,7 +65,7 @@ func (s *ServiceImpl) handleJsonUrl(c *gin.Context) {
 	if !done {
 		return
 	}
-	c.JSON(http.StatusOK, service.Response{Result: newUrl})
+	c.JSON(-1, service.Response{Result: s.cfg.TargetAddress + "/" + newUrl})
 }
 
 func (s *ServiceImpl) handleJsonBatch(c *gin.Context) {

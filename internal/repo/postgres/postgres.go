@@ -31,15 +31,16 @@ func (p *Postgres) Get(hash string) (string, error) {
 	}
 }
 
-func (p *Postgres) Set(hash, url string) error {
+func (p *Postgres) Set(hash, url string) error { // TODO update set for batches
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	tag, err := p.conn.Exec(ctx, "INSERT INTO Urls(short, original) VALUES ($1, $2)", hash, url)
+	tag, err := p.conn.Exec(ctx, "INSERT INTO Urls(short, original) VALUES ($1, $2)"+
+		"ON CONFLICT(original) DO NOTHING", hash, url)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return errors.New("wrong affected rows number")
+		return errors.New("CONFLICT")
 	}
 	return nil
 }
@@ -84,7 +85,7 @@ func (p *Postgres) prepareDb() error {
         CREATE TABLE IF NOT EXISTS Urls (
             id SERIAL PRIMARY KEY,
             short TEXT NOT NULL,
-            original TEXT NOT NULL
+            original TEXT UNIQUE NOT NULL
         );
     `
 	_, err := p.conn.Exec(ctx, createScript)
