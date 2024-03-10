@@ -4,5 +4,10 @@ type Repo interface {
 	Get(hash string) (string, bool)
 	Set(hash, utl string) error
 	Init() error
-	Close()
+	Close() error
+}
+
+type DbRepo interface {
+	Repo
+	Ping() error
 }

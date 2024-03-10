@@ -1,6 +1,7 @@
 package service_impl
 
 import (
+	"Yandex/internal/repo"
 	"Yandex/internal/service"
 	"encoding/json"
 	"errors"
@@ -61,4 +62,16 @@ func (s *ServiceImpl) handleJsonUrl(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, service.Result{Result: newUrl})
+}
+
+func (s *ServiceImpl) handlePing(c *gin.Context) {
+	if dbRepo, ok := s.repo.(repo.DbRepo); ok {
+		if err := dbRepo.Ping(); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		c.Status(http.StatusOK)
+		return
+	}
+	c.AbortWithError(http.StatusInternalServerError, errors.New("no db connected"))
 }

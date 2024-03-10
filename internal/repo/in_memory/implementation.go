@@ -81,6 +81,6 @@ func (i *Implementation) Set(hash, url string) error {
 	return nil
 }
 
-func (i *Implementation) Close() {
-	i.info.File.Close()
+func (i *Implementation) Close() error {
+	return i.info.File.Close()
 }
