@@ -10,7 +10,7 @@ import (
 )
 
 type Implementation struct {
-	data map[string]string
+	data map[string]string // TODO to sync.map
 	info models.FileInfo
 	mu   sync.RWMutex
 }

@@ -1,7 +1,7 @@
 package conf
 
 import (
-	"Yandex/internal/service"
+	"Yandex/internal/models"
 	"flag"
 	"os"
 )
@@ -11,12 +11,12 @@ const (
 )
 
 type ConfigImpl struct {
-	service        service.Conf
+	service        models.Conf
 	fileLocation   string
 	databaseString string
 }
 
-func (c *ConfigImpl) GetServiceConf() *service.Conf {
+func (c *ConfigImpl) GetServiceConf() *models.Conf {
 	return &c.service
 }
 
@@ -35,7 +35,7 @@ func New() *ConfigImpl {
 	ds := getArg("d", "DATABASE_DSN", "Database config string", "")
 	flag.Parse()
 	return &ConfigImpl{
-		service: service.Conf{
+		service: models.Conf{
 			HostAddress:   *ha,
 			TargetAddress: *ta,
 		},

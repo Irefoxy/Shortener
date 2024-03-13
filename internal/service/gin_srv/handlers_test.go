@@ -1,4 +1,4 @@
-package service_impl
+package gin_srv
 
 import (
 	"github.com/gin-gonic/gin"
@@ -32,17 +32,17 @@ func (m *MockEngine) Get(url string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func initMock() *ServiceImpl {
+func initMock() *GinService {
 	mockRepo := new(MockRepo)
 	mockEngine := new(MockEngine)
 
-	mockRepo.On("Get", "3JRsVv5L").Return("https://yandex.ru", true)
-	mockRepo.On("Get", "asd").Return("", false)
+	mockRepo.On("Parse", "3JRsVv5L").Return("https://yandex.ru", true)
+	mockRepo.On("Parse", "asd").Return("", false)
 
-	mockEngine.On("Get", "https://yandex.ru").Return("3JRsVv5L", nil)
-	return &ServiceImpl{
+	mockEngine.On("Parse", "https://yandex.ru").Return("3JRsVv5L", nil)
+	return &GinService{
 		repo:   mockRepo,
-		engine: mockEngine,
+		parser: mockEngine,
 	}
 }
 

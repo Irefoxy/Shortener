@@ -2,28 +2,31 @@ package app
 
 import (
 	"Yandex/internal/conf"
-	"Yandex/internal/engine"
-	"Yandex/internal/engine/engine_impl"
-	"Yandex/internal/repo"
+	"Yandex/internal/parser"
+	"Yandex/internal/parser/parser"
 	"Yandex/internal/repo/in_memory"
 	"Yandex/internal/repo/postgres"
-	"Yandex/internal/service"
-	"Yandex/internal/service/service_impl"
+	"Yandex/internal/service/gin_srv"
 	"github.com/sirupsen/logrus"
 	"os"
 )
 
+type Service interface {
+	Run() error
+	Stop()
+}
+
 type Provider struct {
 	logger *logrus.Logger
 	cfg    *conf.ConfigImpl
-	srv    service.Service
+	srv    Service
 	repo   repo.Repo
 	engine engine.Engine
 }
 
 func (p *Provider) Service() service.Service {
 	if p.srv == nil {
-		p.srv = service_impl.New(p.Repo(), p.Engine(), p.Config().GetServiceConf(), p.Logger())
+		p.srv = gin_srv.New(p.Repo(), p.Engine(), p.Config().GetServiceConf(), p.Logger())
 	}
 	return p.srv
 }
@@ -53,7 +56,7 @@ func (p *Provider) Repo() repo.Repo {
 
 func (p *Provider) Engine() engine.Engine {
 	if p.engine == nil {
-		p.engine = engine_impl.New()
+		p.engine = parser.New()
 	}
 	return p.engine
 }

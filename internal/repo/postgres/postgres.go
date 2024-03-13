@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"Yandex/internal/models"
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
@@ -16,22 +17,24 @@ func New(dsn string) *Postgres {
 	return &Postgres{dsn: dsn}
 }
 
-func (p *Postgres) Get(hash string) (string, error) {
+func (p *Postgres) Get(unit models.ServiceUnit) ([]models.ServiceUnit, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	row := p.conn.QueryRow(ctx, "SELECT original FROM urls WHERE short=$1", hash)
-	var url string
-	switch err := row.Scan(&url); {
+	row := p.conn.QueryRow(ctx, "SELECT original FROM urls WHERE short=$1 and user_id=$2", unit.ShortUrl, unit)
+	var shortUrl string
+	switch err := row.Scan(&shortUrl); {
 	case err == nil:
-		return url, nil
+
+		unit.ShortUrl = shortUrl
+		return []models.ServiceUnit{unit}, nil
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil
+		return nil, nil
 	default:
-		return "", err
+		return nil, err
 	}
 }
 
-func (p *Postgres) Set(hash, url string) error { // TODO update set for batches
+func (p *Postgres) Set(units ...models.ServiceUnit) error { // TODO update set for batches
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	tag, err := p.conn.Exec(ctx, "INSERT INTO Urls(short, original) VALUES ($1, $2)"+
