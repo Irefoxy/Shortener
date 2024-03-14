@@ -13,4 +13,5 @@ const (
 	ErrorAuthorizationFailed = StaticError("authorization failed")
 	ErrorShortURLNotExist    = StaticError("no such short url")
 	ErrorDBNotConnected      = StaticError("no db connected")
+	ErrorFailedToLoadData    = StaticError("error in loading file")
 )

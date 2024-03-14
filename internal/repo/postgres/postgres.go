@@ -76,7 +76,7 @@ func (p *Postgres) Get(ctx context.Context, unit models.ServiceUnit) (*models.Se
 	}
 }
 
-func (p *Postgres) Set(ctx context.Context, units models.ServiceUnit) error { // TODO update set for batches
+func (p *Postgres) Set(ctx context.Context, units models.ServiceUnit) error {
 	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	tag, err := p.conn.Exec(newCtx, "INSERT INTO Urls(uuid, short, original) VALUES ($1, $2, $3)"+
@@ -97,7 +97,7 @@ func (p *Postgres) Init(ctx context.Context) error {
 	if p.conn, err = pgx.Connect(newCtx, p.dsn); err != nil {
 		return err
 	}
-	if err = p.prepareDb(); err != nil {
+	if err = p.prepareDb(ctx); err != nil {
 		return err
 	}
 	return nil

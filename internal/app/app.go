@@ -3,7 +3,6 @@ package app
 import (
 	"Yandex/internal/conf"
 	"Yandex/internal/parser"
-	"Yandex/internal/parser/parser"
 	"Yandex/internal/repo/in_memory"
 	"Yandex/internal/repo/postgres"
 	"Yandex/internal/service/gin_srv"
@@ -19,12 +18,12 @@ type Service interface {
 type Provider struct {
 	logger *logrus.Logger
 	cfg    *conf.ConfigImpl
-	srv    Service
-	repo   repo.Repo
-	engine engine.Engine
+	srv    *gin_srv.GinService
+	repo   gin_srv.Repo
+	engine gin_srv.Parser
 }
 
-func (p *Provider) Service() service.Service {
+func (p *Provider) Service() *gin_srv.GinService {
 	if p.srv == nil {
 		p.srv = gin_srv.New(p.Repo(), p.Engine(), p.Config().GetServiceConf(), p.Logger())
 	}
@@ -43,7 +42,7 @@ func (p *Provider) Logger() *logrus.Logger {
 	return p.logger
 }
 
-func (p *Provider) Repo() repo.Repo {
+func (p *Provider) Repo() gin_srv.Repo {
 	if p.repo == nil {
 		if p.Config().GetDatabaseString() == "" {
 			p.repo = in_memory.New(p.Config().GetFileLocation())
@@ -54,7 +53,7 @@ func (p *Provider) Repo() repo.Repo {
 	return p.repo
 }
 
-func (p *Provider) Engine() engine.Engine {
+func (p *Provider) Engine() gin_srv.Parser {
 	if p.engine == nil {
 		p.engine = parser.New()
 	}
