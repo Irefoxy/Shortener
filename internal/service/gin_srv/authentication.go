@@ -1,8 +1,8 @@
 package gin_srv
 
 import (
+	"Yandex/internal/models"
 	"encoding/hex"
-	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"net/http"
@@ -10,27 +10,34 @@ import (
 )
 
 func (s *GinService) setCookie(c *gin.Context) {
-	if _, ok := c.Get("user_id"); !ok {
-		cookie := s.cookie.createSignedCookie("user_id")
+	if _, ok := c.Get(cookieName); !ok {
+		cookie := s.cookie.createSignedCookie(cookieName)
 		http.SetCookie(c.Writer, cookie)
+		s.logger.Infof("Cookie: new cookie generated for %s", c.ClientIP())
 	}
 }
 
 func checkAuthentication(c *gin.Context) {
-	if _, ok := c.Get("user_id"); !ok {
-		c.AbortWithError(http.StatusUnauthorized, errors.New("authorization fail")).SetType(gin.ErrorTypePublic)
+	if _, ok := c.Get(cookieName); !ok {
+		errorSetter(c, http.StatusUnauthorized, models.ErrorAuthorizationFailed)
 	}
 }
 
 func (s *GinService) authentication(c *gin.Context) {
-	if value, err := c.Cookie("user_id"); err == nil {
+	if value, err := c.Cookie(cookieName); err == nil {
+		s.logger.Infof("Authentication: %s found: %s for %s", cookieName, value, c.ClientIP())
 		if id, ok := s.cookie.verifyCookie(value); ok {
-			c.Set("userID", id)
+			c.Set(cookieName, id)
+			s.logger.Infof("Authentication for %s succeded", id)
+			return
 		}
+		s.logger.Infof("Authentication for %s failed", c.ClientIP())
+		return
 	}
+	s.logger.Infof("Authentication: %s not found for %s", cookieName, c.ClientIP())
 }
 
-func (e cookieEngine) verifyCookie(cookieValue string) (string, bool) {
+func (e *cookieEngine) verifyCookie(cookieValue string) (string, bool) {
 	parts := strings.Split(cookieValue, "|")
 	if len(parts) != 2 {
 		return "", false
@@ -41,14 +48,16 @@ func (e cookieEngine) verifyCookie(cookieValue string) (string, bool) {
 	return value, e.equal([]byte(signature), []byte(expectedSignature))
 }
 
-func (e cookieEngine) getSignature(value string) string {
+func (e *cookieEngine) getSignature(value string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.hasher.Write([]byte(value))
 	expectedSignature := hex.EncodeToString(e.hasher.Sum(nil))
 	e.hasher.Reset()
 	return expectedSignature
 }
 
-func (e cookieEngine) createSignedCookie(name string) *http.Cookie {
+func (e *cookieEngine) createSignedCookie(name string) *http.Cookie {
 	value := uuid.New().String()
 	signature := e.getSignature(value)
 	signedValue := value + "|" + signature

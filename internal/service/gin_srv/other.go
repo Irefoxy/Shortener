@@ -1,6 +1,7 @@
 package gin_srv
 
 import (
+	"Yandex/internal/models"
 	"compress/gzip"
 	"errors"
 	"github.com/gin-gonic/gin"
@@ -33,8 +34,7 @@ func (s *GinService) errorMiddleware(c *gin.Context) {
 func unzipMiddleware(c *gin.Context) {
 	if strings.Contains(c.GetHeader("Content-Encoding"), "gzip") {
 		gz, err := gzip.NewReader(c.Request.Body)
-		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, err).SetType(gin.ErrorTypePublic)
+		if errorSetter(c, http.StatusBadRequest, err) != nil {
 			return
 		}
 		defer gz.Close()
@@ -66,10 +66,11 @@ func (s *GinService) responseLoggerMiddleware(c *gin.Context) {
 
 func checkRequest(c *gin.Context) {
 	if c.Request.Body == nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("empty body")).SetType(gin.ErrorTypePublic)
+		errorSetter(c, http.StatusBadRequest, models.ErrorEmptyBody)
+
 	}
 	if !checkContent(c) {
-		c.AbortWithError(http.StatusBadRequest, errors.New("wrong content-type")).SetType(gin.ErrorTypePublic)
+		errorSetter(c, http.StatusBadRequest, models.ErrorBadContent)
 	}
 }
 
@@ -92,4 +93,14 @@ func (s *GinService) handleWildcard(c *gin.Context) {
 	} else {
 		s.handleUrl(c)
 	}
+}
+
+func errorSetter(c *gin.Context, status int, err error) error {
+	if !errors.Is(err, models.ErrorConflict) {
+		ginError := c.AbortWithError(status, models.ErrorEmptyBody)
+		if status != http.StatusInternalServerError {
+			ginError.SetType(gin.ErrorTypePublic)
+		}
+	}
+	return err
 }

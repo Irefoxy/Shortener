@@ -6,8 +6,7 @@ import (
 	"strings"
 )
 
-type Parser struct {
-}
+type Parser struct{}
 
 func New() *Parser {
 	return &Parser{}

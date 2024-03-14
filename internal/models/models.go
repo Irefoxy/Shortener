@@ -1,17 +1,7 @@
 package models
 
-type Plain string
-
-func (p Plain) String() string {
-	return string(p)
-}
-
 type URL struct {
 	Url string `json:"url"`
-}
-
-func (u URL) String() string {
-	return u.Url
 }
 
 type ShortURL struct {
@@ -21,10 +11,6 @@ type ShortURL struct {
 type BatchURL struct {
 	Id       string `json:"correlation_id"`
 	Original string `json:"original_url"`
-}
-
-func (u BatchURL) String() string {
-	return u.Original
 }
 
 type BatchShortURL struct {

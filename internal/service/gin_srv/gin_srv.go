@@ -13,21 +13,25 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
 
 const secret = "server" // TODO change to config
+const cookieName = "userID"
 
 type Parser interface {
 	Parse(input []byte) (string, error)
 }
 
 type Repo interface {
-	Init() error
-	Get(units models.ServiceUnit) ([]models.ServiceUnit, error)
-	Set(units ...models.ServiceUnit) error
-	Close() error
+	Init(ctx context.Context) error
+	Get(ctx context.Context, units models.ServiceUnit) (*models.ServiceUnit, error)
+	GetAllUrls(ctx context.Context, unit models.ServiceUnit) ([]models.ServiceUnit, error)
+	SetBatch(ctx context.Context, units []models.ServiceUnit) error
+	Set(ctx context.Context, units models.ServiceUnit) error
+	Close(ctx context.Context) error
 }
 
 type DbRepo interface {
@@ -47,6 +51,7 @@ type GinService struct {
 type cookieEngine struct {
 	hasher hash.Hash
 	equal  func([]byte, []byte) bool
+	mu     sync.Mutex
 }
 
 func newCookieEngine(secretKey string) *cookieEngine {
@@ -59,7 +64,9 @@ func New(r Repo, e Parser, cfg *models.Conf, logger *logrus.Logger) *GinService 
 }
 
 func (s *GinService) Run() error {
-	if err := s.repo.Init(); err != nil {
+	baseCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.repo.Init(baseCtx); err != nil {
 		return err
 	}
 	r := s.init()
@@ -78,7 +85,7 @@ func (s *GinService) Run() error {
 	select {
 	case <-s.stopChan:
 		s.logger.Println("Shutting down server...")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
 			s.logger.Warnf("Server Shutdown Failed:%+v", err)
@@ -87,7 +94,7 @@ func (s *GinService) Run() error {
 	case err := <-errorChan:
 		s.logger.Warnf("Server Run error:%+v", err)
 	}
-	s.repo.Close()
+	s.repo.Close(baseCtx)
 	return nil
 }
 

@@ -2,149 +2,149 @@ package gin_srv
 
 import (
 	"Yandex/internal/models"
-	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
-	"io"
 	"net/http"
 	"strings"
 )
 
 func (s *GinService) handleUrl(c *gin.Context) {
-	url, err := readPlainText(c)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	urls, err := readRequest[string](c)
+	if errorSetter(c, http.StatusBadRequest, err) != nil {
 		return
 	}
-	units, err := s.processUri(c, url)
-	if err != nil {
-		if !errors.Is(err, err) {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.Status(http.StatusConflict)
-	} else {
-		c.Status(http.StatusCreated)
+	shortUrl, err := s.processSingleRequest(c, urls[0])
+	switch {
+	case errors.Is(err, models.ErrorConflict):
+		c.String(http.StatusConflict, "http://%s/%s", s.cfg.TargetAddress, shortUrl)
+	case err != nil:
+		errorSetter(c, http.StatusInternalServerError, err)
+	default:
+		c.String(http.StatusCreated, "http://%s/%s", s.cfg.TargetAddress, shortUrl)
 	}
-	c.String(-1, "http://%s/%s", s.cfg.TargetAddress, units[0].ShortUrl)
-}
-
-func readPlainText(c *gin.Context) (models.Plain, error) {
-	data, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		return "", err
-	}
-	request := models.Plain(data)
-	return request, nil
-}
-
-type Requests interface {
-	String() string
-}
-
-func (s *GinService) processUri(c *gin.Context, urls ...Requests) ([]models.ServiceUnit, error) {
-	units, err := s.getUnits(urls, c.GetString("user_id"))
-	if err != nil {
-		return nil, err
-	}
-
-	err = s.repo.Set(units...)
-	if err != nil {
-		return nil, err
-	}
-	c.Status(http.StatusCreated)
-	return units, nil
-}
-
-func (s *GinService) getUnits(urls []Requests, id string) ([]models.ServiceUnit, error) {
-	units := make([]models.ServiceUnit, 0, len(urls))
-	for _, url := range urls {
-		newUrl, err := s.parser.Parse([]byte(url.String()))
-		if err != nil {
-			return nil, err
-		}
-		units = append(units, models.ServiceUnit{
-			Id:          id,
-			OriginalUrl: url.String(),
-			ShortUrl:    newUrl,
-		})
-	}
-	return units, nil
-}
-
-func (s *GinService) handleRedirect(c *gin.Context) {
-	param := c.Param("id")
-	id := strings.TrimPrefix(param, "/")
-	v, err := s.repo.Get(models.ServiceUnit{
-		Id:       c.GetString("user_id"),
-		ShortUrl: id,
-	})
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	if v != nil {
-		c.Redirect(http.StatusTemporaryRedirect, v[0].OriginalUrl)
-		return
-	}
-	c.AbortWithError(http.StatusBadRequest, errors.New("no such short url")).SetType(gin.ErrorTypePublic)
 }
 
 func (s *GinService) handleJsonUrl(c *gin.Context) {
-	request, err := readJson[models.URL](c)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	request, err := readRequest[models.URL](c)
+	if errorSetter(c, http.StatusBadRequest, err) != nil {
 		return
 	}
-	units, err := s.processUri(c, request)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
+	shortUrl, err := s.processSingleRequest(c, request[0].Url)
+	switch {
+	case errors.Is(err, models.ErrorConflict):
+		c.JSON(http.StatusConflict, models.ShortURL{Result: s.cfg.TargetAddress + "/" + shortUrl})
+	case err != nil:
+		errorSetter(c, http.StatusInternalServerError, err)
+	default:
+		c.JSON(http.StatusCreated, models.ShortURL{Result: s.cfg.TargetAddress + "/" + shortUrl})
 	}
-	c.JSON(-1, models.ShortURL{Result: s.cfg.TargetAddress + "/" + units[0].ShortUrl})
 }
 
 func (s *GinService) handleJsonBatch(c *gin.Context) {
-	requests, err := readJson[[]models.BatchURL](c)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	requests, err := readRequest[models.BatchURL](c)
+	if errorSetter(c, http.StatusInternalServerError, err) != nil {
 		return
 	}
-	var reqs []Requests
-	for _, r := range requests {
-		reqs = append(reqs, r)
-	}
-	units, err := s.processUri(c, reqs...)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+	urls := getUrlsFromJsonBatch(requests)
+	newUrls, err := s.getNewUrls(urls...)
+	if errorSetter(c, http.StatusInternalServerError, err) != nil {
 		return
 	}
-	var responses []models.BatchShortURL
-	for i, unit := range units {
-		responses = append(responses, models.BatchShortURL{
-			Id:    requests[i].Id,
-			Short: unit.ShortUrl,
-		})
+	units := getServiceUnits(c.GetString(cookieName), newUrls, urls...)
+	err = s.repo.SetBatch(c.Request.Context(), units)
+	responses := buildResponses(requests, newUrls)
+	switch {
+	case errors.Is(err, models.ErrorConflict):
+		c.JSON(http.StatusConflict, responses)
+	case err != nil:
+		errorSetter(c, http.StatusInternalServerError, err)
+	default:
+		c.JSON(http.StatusCreated, responses)
 	}
-	c.JSON(http.StatusOK, responses)
 }
 
-func readJson[T any](c *gin.Context) (request T, err error) {
-	decoder := json.NewDecoder(c.Request.Body)
-	if err = decoder.Decode(&request); err != nil {
-		return
+func buildResponses(requests []models.BatchURL, urls []string) (responses []models.BatchShortURL) {
+	for i, request := range requests {
+		responses = append(responses, models.BatchShortURL{
+			Id:    request.Id,
+			Short: urls[i],
+		})
 	}
 	return
 }
 
+func (s *GinService) handleRedirect(c *gin.Context) {
+	shortUrlWithPrefix := c.Param("id")
+	shortUrl := strings.TrimPrefix(shortUrlWithPrefix, "/")
+	v, err := s.repo.Get(c.Request.Context(), models.ServiceUnit{
+		Id:       c.GetString(cookieName),
+		ShortUrl: shortUrl,
+	})
+	switch {
+	case err != nil:
+		errorSetter(c, http.StatusInternalServerError, err)
+	case v != nil:
+		c.Redirect(http.StatusTemporaryRedirect, v.OriginalUrl)
+	default:
+		errorSetter(c, http.StatusBadRequest, models.ErrorShortURLNotExist)
+	}
+}
+
 func (s *GinService) handlePing(c *gin.Context) {
-	if dbRepo, ok := s.repo.(DbRepo); ok {
-		if err := dbRepo.Ping(); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.Status(http.StatusOK)
+	if _, ok := s.repo.(DbRepo); !ok {
+		errorSetter(c, http.StatusInternalServerError, models.ErrorDBNotConnected)
 		return
 	}
-	c.AbortWithError(http.StatusInternalServerError, errors.New("no db connected"))
+	if errorSetter(c, http.StatusInternalServerError, s.repo.(DbRepo).Ping()) != nil {
+		return
+	}
+	c.Status(http.StatusOK)
+	return
+}
+
+func readRequest[T any](c *gin.Context) ([]T, error) {
+	var request []T
+	if err := c.ShouldBind(&request); err != nil {
+		return nil, err
+	}
+	return request, nil
+}
+
+func getServiceUnits(id string, short []string, original ...string) (units []models.ServiceUnit) {
+	for i, s := range original {
+		units = append(units, models.ServiceUnit{
+			Id:          id,
+			OriginalUrl: s,
+			ShortUrl:    short[i],
+		})
+	}
+	return
+}
+
+func (s *GinService) processSingleRequest(c *gin.Context, url string) (string, error) {
+	newUrls, err := s.getNewUrls(url)
+	if err != nil {
+		return "", err
+	}
+	units := getServiceUnits(c.GetString(cookieName), newUrls, url)
+	return units[0].ShortUrl, s.repo.Set(c.Request.Context(), units[0])
+}
+
+func (s *GinService) getNewUrls(urls ...string) ([]string, error) {
+	var newUrls []string
+	for _, url := range urls {
+		newUrl, err := s.parser.Parse([]byte(url))
+		if err != nil {
+			return nil, err
+		}
+		newUrls = append(newUrls, newUrl)
+	}
+	return newUrls, nil
+}
+
+func getUrlsFromJsonBatch(batch []models.BatchURL) (urls []string) {
+	for _, elm := range batch {
+		urls = append(urls, elm.Original)
+	}
+	return
 }
