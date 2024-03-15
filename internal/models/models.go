@@ -25,6 +25,6 @@ type ServiceUnit struct {
 }
 
 type Conf struct {
-	HostAddress   string
-	TargetAddress string
+	HostAddress   *string
+	TargetAddress *string
 }

@@ -63,6 +63,7 @@ func (p *Provider) Engine() gin_srv.Parser {
 func (p *Provider) Config() *conf.ConfigImpl {
 	if p.cfg == nil {
 		p.cfg = conf.New()
+		p.cfg.Parse(os.Args[0], os.Args[1:])
 	}
 	return p.cfg
 }

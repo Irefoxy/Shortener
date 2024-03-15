@@ -3,6 +3,7 @@ package conf
 import (
 	"Yandex/internal/models"
 	"flag"
+	"fmt"
 	"os"
 )
 
@@ -12,8 +13,8 @@ const (
 
 type ConfigImpl struct {
 	service        models.Conf
-	fileLocation   string
-	databaseString string
+	fileLocation   *string
+	databaseString *string
 }
 
 func (c *ConfigImpl) GetServiceConf() *models.Conf {
@@ -21,35 +22,34 @@ func (c *ConfigImpl) GetServiceConf() *models.Conf {
 }
 
 func (c *ConfigImpl) GetFileLocation() string {
-	return c.fileLocation
+	return *c.fileLocation
 }
 
 func (c *ConfigImpl) GetDatabaseString() string {
-	return c.databaseString
+	return *c.databaseString
 }
 
 func New() *ConfigImpl {
-	ha := getArg("a", "SERVER_ADDRESS", "Address where to start http server", defaultAddress)
-	ta := getArg("b", "BASE_URL", "Address to send short urls", defaultAddress)
-	fl := getArg("f", "FILE_STORAGE_PATH", "Location of storage file", "")
-	ds := getArg("d", "DATABASE_DSN", "Database config string", "")
-	flag.Parse()
-	return &ConfigImpl{
-		service: models.Conf{
-			HostAddress:   *ha,
-			TargetAddress: *ta,
-		},
-		fileLocation:   *fl,
-		databaseString: *ds,
+	return &ConfigImpl{}
+}
+
+func (c *ConfigImpl) Parse(programName string, argv []string) {
+	flagSet := flag.NewFlagSet(programName, flag.ContinueOnError)
+	c.service.HostAddress = getArg(flagSet, "SERVER_ADDRESS", "Address where to start http server", defaultAddress, "a")
+	c.service.TargetAddress = getArg(flagSet, "BASE_URL", "Address to send short urls", defaultAddress, "b")
+	c.fileLocation = getArg(flagSet, "FILE_STORAGE_PATH", "Location of storage file", "", "f")
+	c.databaseString = getArg(flagSet, "DATABASE_DSN", "Database config string", "", "d")
+	err := flagSet.Parse(argv)
+	if err != nil {
+		fmt.Println(err.Error())
 	}
 }
 
-func getArg(flagName, env, usage, def string) (res *string) {
+func getArg(flagSet *flag.FlagSet, env, usage, def, flagName string) *string {
 	address := os.Getenv(env)
-	res = &address
-	tmp := flag.String(flagName, def, usage)
+	tmp := flagSet.String(flagName, def, usage)
 	if address == "" {
-		res = tmp
+		return tmp
 	}
-	return
+	return &address
 }

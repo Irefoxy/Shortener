@@ -32,11 +32,11 @@ func (s *GinService) handleJsonUrl(c *gin.Context) {
 	shortUrl, err := s.processSingleRequest(c, request[0].Url)
 	switch {
 	case errors.Is(err, models.ErrorConflict):
-		c.JSON(http.StatusConflict, models.ShortURL{Result: s.cfg.TargetAddress + "/" + shortUrl})
+		c.JSON(http.StatusConflict, models.ShortURL{Result: *s.cfg.TargetAddress + "/" + shortUrl})
 	case err != nil:
 		errorSetter(c, http.StatusInternalServerError, err)
 	default:
-		c.JSON(http.StatusCreated, models.ShortURL{Result: s.cfg.TargetAddress + "/" + shortUrl})
+		c.JSON(http.StatusCreated, models.ShortURL{Result: *s.cfg.TargetAddress + "/" + shortUrl})
 	}
 }
 

@@ -71,7 +71,7 @@ func (s *GinService) Run() error {
 	}
 	r := s.init()
 	srv := &http.Server{
-		Addr:    s.cfg.HostAddress,
+		Addr:    *s.cfg.HostAddress,
 		Handler: r,
 	}
 	errorChan := make(chan error)
