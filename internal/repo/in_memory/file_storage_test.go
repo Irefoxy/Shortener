@@ -1,9 +1,7 @@
 package in_memory
 
 import (
-	"Yandex/internal/models"
 	"github.com/stretchr/testify/assert"
-	"io/fs"
 	"os"
 	"testing"
 )
@@ -18,52 +16,43 @@ const (
 	testFileName     = "./test"
 	testSrcFile      = testDir + "two_units.db"
 	testSrcEmptyFile = testDir + "empty.db"
+	testSrcWrongFile = testDir + "wrong.db"
 )
 
-func TestOpen(t *testing.T) {
+func TestLoad(t *testing.T) {
 	tests := []struct {
 		name     string
 		fileName string
 		err      error
+		data     []Sample
 	}{
-		{"File name empty", "", models.ErrorFileNameNotGiven},
-		{"Creating", testFileName, nil},
-		{"Opening twice", testFileName, models.ErrorFileAlreadyOpened},
+		{"File name empty", "", nil, nil},
+		{"Not exist", testFileName, os.ErrNotExist, nil},
+		{"Not exist", testSrcEmptyFile, nil, nil},
+		{"OK", testSrcFile, nil, []Sample{
+			{
+				Id:     1,
+				String: "123",
+			},
+			{
+				Id:     2,
+				String: "234",
+			},
+		}},
+		{"OK", testSrcWrongFile, nil, nil},
 	}
-	// File name is empty
-	number := 0
-	t.Run(tests[number].name, func(t *testing.T) {
-		storage := NewJSONFileStorage[Sample](tests[number].fileName)
-		assert.ErrorIs(t, storage.Open(), tests[number].err)
-	})
 
-	// Creating file
-	number = 1
-	t.Run(tests[number].name, func(t *testing.T) {
-		asrt := assert.New(t)
-		storage := NewJSONFileStorage[Sample](tests[number].fileName)
-		_, err := os.Stat(tests[number].fileName)
-		asrt.ErrorIs(err, fs.ErrNotExist)
-		asrt.NoError(storage.Open())
-		asrt.NoError(storage.Close())
-		_, err = os.Stat(tests[number].fileName)
-		asrt.NoError(err)
-		asrt.NoError(os.Remove(tests[number].fileName))
-	})
-
-	// Trying to open file twice
-	number = 2
-	t.Run(tests[number].name, func(t *testing.T) {
-		asrt := assert.New(t)
-		storage := NewJSONFileStorage[Sample](tests[number].fileName)
-		asrt.NoError(storage.Open())
-		asrt.ErrorIs(storage.Open(), tests[number].err)
-		asrt.NoError(storage.Close())
-		asrt.NoError(os.Remove(tests[number].fileName))
-	})
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			storage := NewJSONFileStorage[Sample](test.fileName)
+			data, err := storage.LoadAll()
+			assert.ErrorIs(t, err, test.err)
+			assert.ElementsMatch(t, data, test.data)
+		})
+	}
 }
 
-func TestWrite(t *testing.T) {
+/*func TestWrite(t *testing.T) {
 	tests := []struct {
 		name     string
 		fileName string
@@ -97,44 +86,4 @@ func TestWrite(t *testing.T) {
 		asrt.NoError(storage.Close())
 		asrt.NoError(storage.Close())
 	})
-}
-
-func TestLoadAll(t *testing.T) {
-	tests := []struct {
-		name     string
-		fileName string
-		expected []Sample
-		err      error
-	}{
-		{"File name empty", "", nil, models.ErrorFileNotOpened},
-		{"OK", testSrcFile, []Sample{
-			{
-				Id:     1,
-				String: "123",
-			},
-			{
-				Id:     2,
-				String: "234",
-			},
-		}, nil},
-		{"Empty src file", testSrcEmptyFile, nil, nil},
-	}
-	number := 0
-	t.Run(tests[number].name, func(t *testing.T) {
-		storage := NewJSONFileStorage[Sample](tests[number].fileName)
-		_, err := storage.LoadAll()
-		assert.ErrorIs(t, err, tests[number].err)
-	})
-
-	for number := 1; number < 3; number++ {
-		t.Run(tests[number].name, func(t *testing.T) {
-			asrt := assert.New(t)
-			storage := NewJSONFileStorage[Sample](tests[number].fileName)
-			asrt.NoError(storage.Open())
-			data, err := storage.LoadAll()
-			asrt.NoError(err)
-			asrt.Equal(data, tests[number].expected)
-			asrt.NoError(storage.Close())
-		})
-	}
-}
+}*/

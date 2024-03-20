@@ -1,21 +1,18 @@
 package in_memory
 
 import (
-	"Yandex/internal/api/gin_api"
 	"Yandex/internal/models"
+	m "Yandex/internal/repo/in_memory/models"
 	"context"
 	"sync"
 )
 
-var _ gin_api.Repo = (*InMemory)(nil)
+//var _ shortener.Repo = (*InMemory)(nil)
 
 //go:generate mockgen -source=in_memory.go -package=mocks -destination=./mocks/mock_filestorage.go
 type FileStorage[T any] interface {
-	Open() error
 	LoadAll() ([]T, error)
-	Close() error
-	Write(*T) error
-	IsOpened() bool
+	Dump([]T) error
 }
 
 type InMemory struct {
@@ -24,22 +21,13 @@ type InMemory struct {
 	mu   sync.RWMutex
 }
 
-type key struct {
-	id       string
-	original string
-}
-
 func New(stg FileStorage[models.Entry]) *InMemory {
 	return &InMemory{
 		file: stg,
 	}
 }
 
-func (i *InMemory) ConnectStorage(_ context.Context) error {
-	err := i.file.Open()
-	if err != nil {
-		return err
-	}
+func (i *InMemory) ConnectStorage() error {
 	data, err := i.file.LoadAll()
 	if err != nil {
 		return err
@@ -47,20 +35,29 @@ func (i *InMemory) ConnectStorage(_ context.Context) error {
 	return i.addDataToMap(data)
 }
 
-func (i *InMemory) Close(_ context.Context) error {
-	return i.file.Close()
+func (i *InMemory) Close() error {
+	data := i.exportData()
+	return i.file.Dump(data)
 }
 
-func (i *InMemory) Get(_ context.Context, units models.Entry) (*models.Entry, error) {
-	v, ok := i.data.Load(key{
-		id:       units.Id,
-		original: units.OriginalUrl,
+func (i *InMemory) exportData() (exportedData []models.Entry) {
+	i.data.Range(func(key, value any) bool {
+		k := key.(m.Key)
+		v := value.(m.Value)
+		exportedData = append(exportedData, m.KeyValueToEntry(k, v))
+		return true
 	})
+	return exportedData
+}
+
+func (i *InMemory) Get(_ context.Context, unit models.Entry) (*models.Entry, error) {
+	adapter := m.NewEntryAdapter(unit)
+	v, ok := i.data.Load(adapter.Key())
 	if !ok {
 		return nil, nil
 	}
-	units.ShortUrl = v.(string)
-	return &units, nil
+	result := m.KeyValueToEntry(adapter.Key(), v.(m.Value))
+	return &result, nil
 }
 
 func (i *InMemory) GetAllUrlsByUUID(ctx context.Context, uuid string) (result []models.Entry, err error) {
