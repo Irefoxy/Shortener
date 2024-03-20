@@ -1,4 +1,4 @@
-package gin_srv
+package gin_api
 
 import (
 	"github.com/gin-gonic/gin"
@@ -36,10 +36,10 @@ func initMock() *GinService {
 	mockRepo := new(MockRepo)
 	mockEngine := new(MockEngine)
 
-	mockRepo.On("Parse", "3JRsVv5L").Return("https://yandex.ru", true)
-	mockRepo.On("Parse", "asd").Return("", false)
+	mockRepo.On("Generate", "3JRsVv5L").Return("https://yandex.ru", true)
+	mockRepo.On("Generate", "asd").Return("", false)
 
-	mockEngine.On("Parse", "https://yandex.ru").Return("3JRsVv5L", nil)
+	mockEngine.On("Generate", "https://yandex.ru").Return("3JRsVv5L", nil)
 	return &GinService{
 		repo:   mockRepo,
 		parser: mockEngine,

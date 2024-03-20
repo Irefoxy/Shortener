@@ -1,4 +1,4 @@
-package gin_srv
+package gin_api
 
 import (
 	"Yandex/internal/models"
@@ -19,7 +19,7 @@ func (s *GinService) setCookie(c *gin.Context) {
 
 func checkAuthentication(c *gin.Context) {
 	if _, ok := c.Get(cookieName); !ok {
-		errorSetter(c, http.StatusUnauthorized, models.ErrorAuthorizationFailed)
+		collectErrors(c, http.StatusUnauthorized, models.ErrorAuthorizationFailed, nil)
 	}
 }
 

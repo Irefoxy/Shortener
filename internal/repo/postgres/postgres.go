@@ -1,15 +1,15 @@
 package postgres
 
 import (
+	"Yandex/internal/api/gin_api"
 	"Yandex/internal/models"
-	"Yandex/internal/service/gin_srv"
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"time"
 )
 
-var _ gin_srv.Repo = (*Postgres)(nil)
+var _ gin_api.Repo = (*Postgres)(nil)
 
 type Postgres struct {
 	dsn  string
@@ -20,13 +20,13 @@ func New(dsn string) *Postgres {
 	return &Postgres{dsn: dsn}
 }
 
-func (p *Postgres) GetAllUrls(ctx context.Context, unit models.ServiceUnit) (result []models.ServiceUnit, err error) {
+func (p *Postgres) GetAllUrls(ctx context.Context, unit models.Entry) (result []models.Entry, err error) {
 	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	rows, _ := p.conn.Query(newCtx, "SELECT original, short FROM urls WHERE uuid=$1", unit.Id)
 	var shortUrl, originalUrl string
 	_, err = pgx.ForEachRow(rows, []any{&originalUrl, &shortUrl}, func() error {
-		result = append(result, models.ServiceUnit{
+		result = append(result, models.Entry{
 			Id:          unit.Id,
 			OriginalUrl: originalUrl,
 			ShortUrl:    shortUrl,
@@ -39,7 +39,7 @@ func (p *Postgres) GetAllUrls(ctx context.Context, unit models.ServiceUnit) (res
 	return
 }
 
-func (p *Postgres) SetBatch(ctx context.Context, units []models.ServiceUnit) (err error) {
+func (p *Postgres) SetBatch(ctx context.Context, units []models.Entry) (err error) {
 	newCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
@@ -60,7 +60,7 @@ func (p *Postgres) SetBatch(ctx context.Context, units []models.ServiceUnit) (er
 	return
 }
 
-func (p *Postgres) Get(ctx context.Context, unit models.ServiceUnit) (*models.ServiceUnit, error) {
+func (p *Postgres) Get(ctx context.Context, unit models.Entry) (*models.Entry, error) {
 	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	row := p.conn.QueryRow(newCtx, "SELECT original FROM urls WHERE short=$1 and uuid=$2", unit.ShortUrl, unit.Id)
@@ -76,7 +76,7 @@ func (p *Postgres) Get(ctx context.Context, unit models.ServiceUnit) (*models.Se
 	}
 }
 
-func (p *Postgres) Set(ctx context.Context, units models.ServiceUnit) error {
+func (p *Postgres) Set(ctx context.Context, units models.Entry) error {
 	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	tag, err := p.conn.Exec(newCtx, "INSERT INTO Urls(uuid, short, original) VALUES ($1, $2, $3)"+
@@ -90,7 +90,7 @@ func (p *Postgres) Set(ctx context.Context, units models.ServiceUnit) error {
 	return nil
 }
 
-func (p *Postgres) Init(ctx context.Context) error {
+func (p *Postgres) ConnectStorage(ctx context.Context) error {
 	var err error
 	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

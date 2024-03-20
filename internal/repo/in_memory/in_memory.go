@@ -1,30 +1,27 @@
 package in_memory
 
 import (
+	"Yandex/internal/api/gin_api"
 	"Yandex/internal/models"
-	"Yandex/internal/service/gin_srv"
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
-	"os"
-	"strings"
 	"sync"
 )
 
-var _ gin_srv.Repo = (*InMemory)(nil)
+var _ gin_api.Repo = (*InMemory)(nil)
+
+//go:generate mockgen -source=in_memory.go -package=mocks -destination=./mocks/mock_filestorage.go
+type FileStorage[T any] interface {
+	Open() error
+	LoadAll() ([]T, error)
+	Close() error
+	Write(*T) error
+	IsOpened() bool
+}
 
 type InMemory struct {
 	data sync.Map
-	info *FileInfo
+	file FileStorage[models.Entry]
 	mu   sync.RWMutex
-}
-
-type FileInfo struct {
-	Name    string
-	File    *os.File
-	Encoder *json.Encoder
-	Opened  bool
 }
 
 type key struct {
@@ -32,36 +29,29 @@ type key struct {
 	original string
 }
 
-func NewFileInfo(name string) *FileInfo {
-	return &FileInfo{
-		Name: name,
-	}
-}
-
-func New(name string) *InMemory {
+func New(stg FileStorage[models.Entry]) *InMemory {
 	return &InMemory{
-		info: NewFileInfo(name),
+		file: stg,
 	}
 }
 
-func (i *InMemory) Init(_ context.Context) error {
-	if i.info.empty() {
-		return nil
-	}
-	if err := i.info.openFile(); err != nil {
+func (i *InMemory) ConnectStorage(_ context.Context) error {
+	err := i.file.Open()
+	if err != nil {
 		return err
 	}
-	if err := i.loadData(); err != nil {
+	data, err := i.file.LoadAll()
+	if err != nil {
 		return err
 	}
-	return nil
+	return i.addDataToMap(data)
 }
 
 func (i *InMemory) Close(_ context.Context) error {
-	return i.info.File.Close()
+	return i.file.Close()
 }
 
-func (i *InMemory) Get(_ context.Context, units models.ServiceUnit) (*models.ServiceUnit, error) {
+func (i *InMemory) Get(_ context.Context, units models.Entry) (*models.Entry, error) {
 	v, ok := i.data.Load(key{
 		id:       units.Id,
 		original: units.OriginalUrl,
@@ -73,11 +63,11 @@ func (i *InMemory) Get(_ context.Context, units models.ServiceUnit) (*models.Ser
 	return &units, nil
 }
 
-func (i *InMemory) GetAllUrls(_ context.Context, unit models.ServiceUnit) (result []models.ServiceUnit, err error) {
+func (i *InMemory) GetAllUrlsByUUID(ctx context.Context, uuid string) (result []models.Entry, err error) {
 	i.data.Range(func(k, v any) bool {
-		if k.(key).id == unit.Id {
-			result = append(result, models.ServiceUnit{
-				Id:          unit.Id,
+		if k.(key).id == uuid.Id {
+			result = append(result, models.Entry{
+				Id:          uuid.Id,
 				OriginalUrl: k.(key).original,
 				ShortUrl:    v.(string),
 			})
@@ -87,7 +77,7 @@ func (i *InMemory) GetAllUrls(_ context.Context, unit models.ServiceUnit) (resul
 	return
 }
 
-func (i *InMemory) SetBatch(ctx context.Context, units []models.ServiceUnit) (err error) {
+func (i *InMemory) Set(ctx context.Context, units []models.Entry) (err error) {
 	for _, unit := range units {
 		err2 := i.Set(ctx, unit)
 		if err2 != nil {
@@ -97,74 +87,30 @@ func (i *InMemory) SetBatch(ctx context.Context, units []models.ServiceUnit) (er
 	return
 }
 
-func (i *InMemory) Set(_ context.Context, units models.ServiceUnit) error {
+func (i *InMemory) Set(_ context.Context, units models.Entry) error {
 	_, loaded := i.data.LoadOrStore(key{
 		id:       units.Id,
 		original: units.OriginalUrl,
 	}, units.ShortUrl)
-	if !loaded && i.info.Encoder != nil {
-		if err := i.info.Encoder.Encode(&units); err != nil {
-			return err
-		}
-	}
 	if loaded {
 		return models.ErrorConflict
 	}
-	return nil
-}
-
-func (i *FileInfo) empty() bool {
-	return i.Name == ""
-}
-
-func (i *FileInfo) openFile() error {
-	var err error
-	i.File, err = os.OpenFile(i.Name, os.O_RDWR|os.O_CREATE, 0755)
-	if err != nil {
-		return err
-	}
-	i.Opened = true
-	return nil
-}
-
-func (i *InMemory) loadData() error {
-	err := i.readFile()
-	if err != nil {
-		errors.Join(models.ErrorFailedToLoadData, err)
-	}
-	i.info.Encoder = json.NewEncoder(i.info.File)
-	return nil
-}
-
-func (i *InMemory) readFile() error {
-	bytes, err := io.ReadAll(i.info.File)
-	if err != nil {
-		return err
-	}
-	if len(bytes) == 0 {
+	if !i.file.IsOpened() {
 		return nil
 	}
-	str := strings.Split(string(bytes), "\n")
-	err = i.addDataToMap(str)
-	if err != nil {
-		return err
-	}
-	return nil
+	return i.file.Write(&units)
 }
 
-func (i *InMemory) addDataToMap(str []string) error {
-	for _, line := range str {
-		if strings.TrimSpace(line) == "" {
-			break
-		}
-		var data models.ServiceUnit
-		if err := json.Unmarshal([]byte(line), &data); err != nil {
-			return err
-		}
+func (i *InMemory) Delete(ctx context.Context, units []models.Entry) error {
+
+}
+
+func (i *InMemory) addDataToMap(units []models.Entry) error {
+	for _, unit := range units {
 		i.data.Store(key{
-			id:       data.Id,
-			original: data.OriginalUrl,
-		}, data.ShortUrl)
+			id:       unit.Id,
+			original: unit.OriginalUrl,
+		}, unit.ShortUrl)
 	}
 	return nil
 }

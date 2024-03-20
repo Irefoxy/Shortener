@@ -30,6 +30,8 @@ func TestConfig(t *testing.T) {
 			map[string]string{HostAddressName: "localhost:8888", TargetAddressName: "localhost:8888", DatabaseStringName: "", FileLocationName: ""}},
 		{"OK", []string{"config_test_go", "-a", "localhost:1"}, []string{baseEnvName}, []string{"localhost:2"},
 			map[string]string{HostAddressName: "localhost:1", TargetAddressName: "localhost:2", DatabaseStringName: "", FileLocationName: ""}},
+		{"OK", []string{"config_test_go", "-a", "localhost:1"}, []string{severEnvName}, []string{"localhost:2"},
+			map[string]string{HostAddressName: "localhost:2", TargetAddressName: "localhost:8888", DatabaseStringName: "", FileLocationName: ""}},
 	}
 
 	for _, test := range tests {
@@ -39,17 +41,17 @@ func TestConfig(t *testing.T) {
 			cfg.Parse(test.argv[0], test.argv[1:])
 			clearEnvs(t, test.envName)
 
-			if *cfg.service.HostAddress != test.expected[HostAddressName] {
-				t.Errorf("Expected %s: %s, but got %s", HostAddressName, test.expected[HostAddressName], *cfg.service.HostAddress)
+			if *cfg.GetServiceConf().HostAddress != test.expected[HostAddressName] {
+				t.Errorf("Expected %s: %s, but got %s", HostAddressName, test.expected[HostAddressName], *cfg.GetServiceConf().HostAddress)
 			}
-			if *cfg.service.TargetAddress != test.expected[TargetAddressName] {
-				t.Errorf("Expected %s: %s, but got %s", TargetAddressName, test.expected[TargetAddressName], *cfg.service.TargetAddress)
+			if *cfg.GetServiceConf().TargetAddress != test.expected[TargetAddressName] {
+				t.Errorf("Expected %s: %s, but got %s", TargetAddressName, test.expected[TargetAddressName], *cfg.GetServiceConf().TargetAddress)
 			}
-			if *cfg.databaseString != test.expected[DatabaseStringName] {
-				t.Errorf("Expected %s: %s, but got %s", DatabaseStringName, test.expected[DatabaseStringName], *cfg.databaseString)
+			if cfg.GetDatabaseString() != test.expected[DatabaseStringName] {
+				t.Errorf("Expected %s: %s, but got %s", DatabaseStringName, test.expected[DatabaseStringName], cfg.GetDatabaseString())
 			}
-			if *cfg.fileLocation != test.expected[FileLocationName] {
-				t.Errorf("Expected %s: %s, but got %s", FileLocationName, test.expected[FileLocationName], *cfg.fileLocation)
+			if cfg.GetFileLocation() != test.expected[FileLocationName] {
+				t.Errorf("Expected %s: %s, but got %s", FileLocationName, test.expected[FileLocationName], cfg.GetFileLocation())
 			}
 		})
 	}

@@ -1,4 +1,4 @@
-package parser
+package short_url_generator
 
 import (
 	"encoding/base64"
@@ -12,25 +12,26 @@ func New() *Parser {
 	return &Parser{}
 }
 
-func (_ *Parser) Parse(input []byte) (string, error) {
-	hash, err := getHash(input)
+// Parse Collision resolution should be implemented.
+func (_ *Parser) Generate(input string) (string, error) {
+	hash, err := getHash([]byte(input))
 	if err != nil {
 		return "", err
 	}
-	str, err2 := encodeHashToString(hash)
-	if err2 != nil {
-		return "", err2
+	str, err := encodeHashToString(hash)
+	if err != nil {
+		return "", err
 	}
 	return str, nil
 }
 
 func encodeHashToString(result []byte) (string, error) {
 	writer := strings.Builder{}
-	encoder := base64.NewEncoder(base64.StdEncoding, &writer)
-	defer encoder.Close()
+	encoder := base64.NewEncoder(base64.URLEncoding, &writer)
 	if _, err := encoder.Write(result); err != nil {
 		return "", err
 	}
+	encoder.Close()
 	return writer.String(), nil
 }
 

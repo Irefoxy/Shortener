@@ -1,11 +1,11 @@
 package app
 
 import (
+	"Yandex/internal/api/gin_api"
 	"Yandex/internal/conf"
-	"Yandex/internal/parser"
 	"Yandex/internal/repo/in_memory"
 	"Yandex/internal/repo/postgres"
-	"Yandex/internal/service/gin_srv"
+	"Yandex/internal/short_url_generator"
 	"github.com/sirupsen/logrus"
 	"os"
 )
@@ -18,14 +18,14 @@ type Service interface {
 type Provider struct {
 	logger *logrus.Logger
 	cfg    *conf.ConfigImpl
-	srv    *gin_srv.GinService
-	repo   gin_srv.Repo
-	engine gin_srv.Parser
+	srv    *gin_api.GinService
+	repo   gin_api.Repo
+	engine gin_api.Parser
 }
 
-func (p *Provider) Service() *gin_srv.GinService {
+func (p *Provider) Service() *gin_api.GinService {
 	if p.srv == nil {
-		p.srv = gin_srv.New(p.Repo(), p.Engine(), p.Config().GetServiceConf(), p.Logger())
+		p.srv = gin_api.New(p.Repo(), p.Engine(), p.Config().GetServiceConf(), p.Logger())
 	}
 	return p.srv
 }
@@ -42,7 +42,7 @@ func (p *Provider) Logger() *logrus.Logger {
 	return p.logger
 }
 
-func (p *Provider) Repo() gin_srv.Repo {
+func (p *Provider) Repo() gin_api.Repo {
 	if p.repo == nil {
 		if p.Config().GetDatabaseString() == "" {
 			p.repo = in_memory.New(p.Config().GetFileLocation())
@@ -53,9 +53,9 @@ func (p *Provider) Repo() gin_srv.Repo {
 	return p.repo
 }
 
-func (p *Provider) Engine() gin_srv.Parser {
+func (p *Provider) Engine() gin_api.Parser {
 	if p.engine == nil {
-		p.engine = parser.New()
+		p.engine = short_url_generator.New()
 	}
 	return p.engine
 }

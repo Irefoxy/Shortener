@@ -3,7 +3,6 @@ package conf
 import (
 	"Yandex/internal/models"
 	"flag"
-	"fmt"
 	"os"
 )
 
@@ -12,12 +11,12 @@ const (
 )
 
 type ConfigImpl struct {
-	service        models.Conf
+	service        models.ApiConf
 	fileLocation   *string
 	databaseString *string
 }
 
-func (c *ConfigImpl) GetServiceConf() *models.Conf {
+func (c *ConfigImpl) GetServiceConf() *models.ApiConf {
 	return &c.service
 }
 
@@ -39,10 +38,7 @@ func (c *ConfigImpl) Parse(programName string, argv []string) {
 	c.service.TargetAddress = getArg(flagSet, "BASE_URL", "Address to send short urls", defaultAddress, "b")
 	c.fileLocation = getArg(flagSet, "FILE_STORAGE_PATH", "Location of storage file", "", "f")
 	c.databaseString = getArg(flagSet, "DATABASE_DSN", "Database config string", "", "d")
-	err := flagSet.Parse(argv)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
+	flagSet.Parse(argv)
 }
 
 func getArg(flagSet *flag.FlagSet, env, usage, def, flagName string) *string {
