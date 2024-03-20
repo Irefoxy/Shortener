@@ -31,6 +31,11 @@ type DbRepo interface {
 
 var _ gin_api.Service = (*Shortener)(nil)
 
+// Shortener just skeleton should be encapsulated, tested
+// idea: handler call operation, all operations are send to a chan
+// all operations except deletion run immediately
+// deletion fanIN packets and delete
+// deletion takes place once n sec and before get or add
 type Shortener struct {
 	logger      *logrus.Logger
 	repo        Repo
@@ -84,21 +89,22 @@ func (s *Shortener) Run() error {
 			select {
 			case <-s.context.Context.Done():
 				wg.Wait()
-				err := s.delete()
-				if err != nil {
-					s.logger.Warn(err)
-				}
+				s.deleteAndLog()
 				return
 			case <-time.After(30 * time.Second):
-				err := s.delete()
-				if err != nil {
-					s.logger.Warn(err)
-				}
+				s.deleteAndLog()
 			}
 		}
 	}()
 
 	return nil
+}
+
+func (s *Shortener) deleteAndLog() {
+	err := s.delete()
+	if err != nil {
+		s.logger.Warn(err)
+	}
 }
 
 func (s *Shortener) Add(ctx context.Context, entries []models.Entry) (result []models.Entry, err error) {
@@ -288,6 +294,7 @@ func (s *Shortener) provideAction(request m.Command) *m.Response {
 		if err != nil {
 			return &m.Response{Err: err}
 		}
+		s.deleteAndLog()
 		result, err := s.add(request.Ctx, requests)
 		return &m.Response{Err: err, Entries: result}
 	case "del":
@@ -303,6 +310,7 @@ func (s *Shortener) provideAction(request m.Command) *m.Response {
 		if err != nil {
 			return &m.Response{Err: err}
 		}
+		s.deleteAndLog()
 		result, err := s.get(request.Ctx, requests)
 		return &m.Response{Err: err, Entries: result}
 	case "all":
@@ -310,6 +318,7 @@ func (s *Shortener) provideAction(request m.Command) *m.Response {
 		if err != nil {
 			return &m.Response{Err: err}
 		}
+		s.deleteAndLog()
 		result, err := s.getAll(request.Ctx, requests)
 		return &m.Response{Err: err, Entries: result}
 	case "ping":
@@ -321,6 +330,9 @@ func (s *Shortener) provideAction(request m.Command) *m.Response {
 
 func sendAndClose(request m.Command, response *m.Response) {
 	if request.ResponseChan != nil {
+		if response == nil {
+			panic("no such command")
+		}
 		request.ResponseChan <- *response
 		close(request.ResponseChan)
 	}
