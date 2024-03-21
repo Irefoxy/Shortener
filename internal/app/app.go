@@ -1,69 +1,64 @@
 package app
 
 import (
-	"Yandex/internal/api/gin_api"
 	"Yandex/internal/conf"
 	"Yandex/internal/repo/in_memory"
-	"Yandex/internal/repo/postgres"
-	"Yandex/internal/short_url_generator"
 	"github.com/sirupsen/logrus"
 	"os"
 )
 
-type Service interface {
-	Run() error
-	Stop()
+type App struct {
+	provider *Provider
 }
 
-type Provider struct {
-	logger *logrus.Logger
-	cfg    *conf.ConfigImpl
-	srv    *gin_api.GinService
-	repo   gin_api.Repo
-	engine gin_api.Parser
-}
-
-func (p *Provider) Service() *gin_api.GinService {
-	if p.srv == nil {
-		p.srv = gin_api.New(p.Repo(), p.Engine(), p.Config().GetServiceConf(), p.Logger())
+func New() *App {
+	cfg := conf.New()
+	cfg.Parse(os.Args[0], os.Args[1:])
+	logger := &logrus.Logger{
+		Out:       os.Stdout,
+		Formatter: new(logrus.TextFormatter),
+		Hooks:     make(logrus.LevelHooks),
+		Level:     logrus.InfoLevel,
 	}
-	return p.srv
+	provider := NewProvider(logger, cfg)
+	return &App{provider}
 }
 
-func (p *Provider) Logger() *logrus.Logger {
-	if p.logger == nil {
-		p.logger = &logrus.Logger{
-			Out:       os.Stdout,
-			Formatter: new(logrus.TextFormatter),
-			Hooks:     make(logrus.LevelHooks),
-			Level:     logrus.InfoLevel,
-		}
-	}
-	return p.logger
-}
-
-func (p *Provider) Repo() gin_api.Repo {
-	if p.repo == nil {
-		if p.Config().GetDatabaseString() == "" {
-			p.repo = in_memory.New(p.Config().GetFileLocation())
+func (a App) prepare() error {
+	err := a.provider.Repo().ConnectStorage()
+	if err != nil {
+		repo := a.provider.Repo()
+		if _, ok := repo.(*in_memory.InMemory); ok {
+			a.provider.logger.Warn("Can't connect file to in memory repo")
 		} else {
-			p.repo = postgres.New(p.Config().GetDatabaseString())
+			return err
 		}
 	}
-	return p.repo
+
+	err = a.provider.Service().Run()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (p *Provider) Engine() gin_api.Parser {
-	if p.engine == nil {
-		p.engine = short_url_generator.New()
+func (a App) close() {
+	if err := a.provider.Repo().Close(); err != nil {
+		a.provider.logger.Warn("Can't properly close the repo")
 	}
-	return p.engine
+	if err := a.provider.Service().Stop(); err != nil {
+		a.provider.logger.Warn("Can't properly stop the service")
+	}
 }
 
-func (p *Provider) Config() *conf.ConfigImpl {
-	if p.cfg == nil {
-		p.cfg = conf.New()
-		p.cfg.Parse(os.Args[0], os.Args[1:])
+func (a App) Run() error {
+	if err := a.prepare(); err != nil {
+		return err
 	}
-	return p.cfg
+	defer a.close()
+	return a.provider.Api().Run()
+}
+
+func (a App) Stop() error {
+	return a.provider.Api().Stop()
 }

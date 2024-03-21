@@ -16,7 +16,7 @@ type ConfigImpl struct {
 	databaseString *string
 }
 
-func (c *ConfigImpl) GetServiceConf() *models.ApiConf {
+func (c *ConfigImpl) GetApiConf() *models.ApiConf {
 	return &c.service
 }
 

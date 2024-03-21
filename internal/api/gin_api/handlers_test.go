@@ -32,7 +32,7 @@ func (m *MockEngine) Get(url string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func initMock() *GinService {
+func initMock() *GinApi {
 	mockRepo := new(MockRepo)
 	mockEngine := new(MockEngine)
 
@@ -40,7 +40,7 @@ func initMock() *GinService {
 	mockRepo.On("Generate", "asd").Return("", false)
 
 	mockEngine.On("Generate", "https://yandex.ru").Return("3JRsVv5L", nil)
-	return &GinService{
+	return &GinApi{
 		repo:   mockRepo,
 		parser: mockEngine,
 	}

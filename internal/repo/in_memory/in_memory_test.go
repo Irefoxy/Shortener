@@ -59,13 +59,13 @@ func (s *RepoSuite) TestExportImport() {
 func (s *RepoSuite) TestFailedConnectAndClose() {
 	s.storage.EXPECT().LoadAll().Return(nil, testError)
 	s.storage.EXPECT().Dump(gomock.Any()).Return(testError)
-	s.Assert().ErrorIs(s.repo.ConnectStorage(context.Background()), testError)
-	s.Assert().ErrorIs(s.repo.Close(context.Background()), testError)
+	s.Assert().ErrorIs(s.repo.ConnectStorage(), testError)
+	s.Assert().ErrorIs(s.repo.Close(), testError)
 }
 
 func (s *RepoSuite) TestOKConnect() {
 	s.storage.EXPECT().LoadAll().Return(nil, nil)
-	s.Assert().NoError(s.repo.ConnectStorage(context.Background()))
+	s.Assert().NoError(s.repo.ConnectStorage())
 }
 
 func (s *RepoSuite) TestSetAndGet00() {

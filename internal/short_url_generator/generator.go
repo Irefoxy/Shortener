@@ -31,7 +31,7 @@ func encodeHashToString(result []byte) (string, error) {
 	if _, err := encoder.Write(result); err != nil {
 		return "", err
 	}
-	encoder.Close()
+	encoder.Close() // Close encoder before getting string from builder
 	return writer.String(), nil
 }
 

@@ -2,10 +2,12 @@ package main
 
 import (
 	"Yandex/internal/app"
+	"log"
 )
 
 func main() {
-	provider := app.Provider{}
-	srv := provider.Service()
-	srv.Run()
+	a := app.New()
+	if err := a.Run(); err != nil {
+		log.Fatalf("Failed to run the app: %v", err)
+	}
 }

@@ -10,29 +10,29 @@ import (
 	"strings"
 )
 
-func (s *GinService) handleUrl(c *gin.Context) {
+func (s *GinApi) handleUrl(c *gin.Context) {
 	shortUrl, err := s.handleSingleURL(c)
 	sendResponse(c, shortUrl, err)
 }
 
-func (s *GinService) handleJsonUrl(c *gin.Context) {
+func (s *GinApi) handleJsonUrl(c *gin.Context) {
 	response, err := s.handleSingleJSON(c)
 	sendResponse(c, response, err)
 }
 
-func (s *GinService) handleJsonBatch(c *gin.Context) {
+func (s *GinApi) handleJsonBatch(c *gin.Context) {
 	response, err := s.handleMultipleJSON(c)
 	sendResponse(c, response, err)
 }
 
-func (s *GinService) handleRedirect(c *gin.Context) {
+func (s *GinApi) handleRedirect(c *gin.Context) {
 	shortUrlWithPrefix := c.Param("parameterName")
 	shortUrl := strings.TrimPrefix(shortUrlWithPrefix, "/")
 	v, err := s.service.Get(c.Request.Context(), converters.ApiShortUrlsToEntry(c.GetString(cookieName), shortUrl)[0])
 	sendRedirect(c, v, err)
 }
 
-func (s *GinService) handlePing(c *gin.Context) {
+func (s *GinApi) handlePing(c *gin.Context) {
 	err := s.service.Ping(c.Request.Context())
 	if err == nil {
 		collectErrors(c, http.StatusInternalServerError, err, nil)
@@ -40,12 +40,12 @@ func (s *GinService) handlePing(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-func (s *GinService) handleGetAll(c *gin.Context) {
+func (s *GinApi) handleGetAll(c *gin.Context) {
 	response, err := s.service.GetAll(c.Request.Context(), c.GetString(cookieName))
 	sendAllURLS(c, response, err)
 }
 
-func (s *GinService) handleDelete(c *gin.Context) {
+func (s *GinApi) handleDelete(c *gin.Context) {
 	err := s.processDeletion(c)
 	switch {
 	case err != nil:
@@ -55,7 +55,7 @@ func (s *GinService) handleDelete(c *gin.Context) {
 	}
 }
 
-func (s *GinService) processDeletion(c *gin.Context) error {
+func (s *GinApi) processDeletion(c *gin.Context) error {
 	requests, err := readRequest[[]string](c)
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func (s *GinService) processDeletion(c *gin.Context) error {
 	return s.service.Delete(c.Request.Context(), converters.ApiShortUrlsToEntry(c.GetString(cookieName), requests...))
 }
 
-func (s *GinService) handleSingleURL(c *gin.Context) (result string, err error) {
+func (s *GinApi) handleSingleURL(c *gin.Context) (result string, err error) {
 	request, err := readRequest[string](c)
 	if err != nil {
 		return
@@ -75,7 +75,7 @@ func (s *GinService) handleSingleURL(c *gin.Context) (result string, err error) 
 	return
 }
 
-func (s *GinService) handleSingleJSON(c *gin.Context) (result m.ShortURL, err error) {
+func (s *GinApi) handleSingleJSON(c *gin.Context) (result m.ShortURL, err error) {
 	request, err := readRequest[m.URL](c)
 	if err != nil {
 		return
@@ -87,7 +87,7 @@ func (s *GinService) handleSingleJSON(c *gin.Context) (result m.ShortURL, err er
 	return
 }
 
-func (s *GinService) handleMultipleJSON(c *gin.Context) (result []m.BatchShortURL, err error) {
+func (s *GinApi) handleMultipleJSON(c *gin.Context) (result []m.BatchShortURL, err error) {
 	requests, err := readRequest[[]m.BatchURL](c)
 	if err != nil {
 		return

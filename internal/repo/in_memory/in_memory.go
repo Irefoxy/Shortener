@@ -27,7 +27,7 @@ func New(stg FileStorage[models.Entry]) *InMemory {
 	}
 }
 
-func (i *InMemory) ConnectStorage(_ context.Context) error {
+func (i *InMemory) ConnectStorage() error {
 	data, err := i.file.LoadAll()
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func (i *InMemory) ConnectStorage(_ context.Context) error {
 	return nil
 }
 
-func (i *InMemory) Close(_ context.Context) error {
+func (i *InMemory) Close() error {
 	data := i.exportData()
 	return i.file.Dump(data)
 }

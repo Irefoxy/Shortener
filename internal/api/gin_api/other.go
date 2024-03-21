@@ -16,7 +16,7 @@ type ApiError struct {
 	Data   any
 }
 
-func (s *GinService) errorMiddleware(c *gin.Context) {
+func (s *GinApi) errorMiddleware(c *gin.Context) {
 	c.Next()
 	lastErr := c.Errors.Last()
 	if lastErr == nil {
@@ -40,7 +40,7 @@ func (s *GinService) errorMiddleware(c *gin.Context) {
 	c.Status(err.Status)
 }
 
-func (s *GinService) logError(c *gin.Context) {
+func (s *GinApi) logError(c *gin.Context) {
 	for _, err := range c.Errors {
 		s.logger.WithFields(logrus.Fields{
 			"method": c.Request.Method,
@@ -64,7 +64,7 @@ func unzipMiddleware(c *gin.Context) {
 	c.Next()
 }
 
-func (s *GinService) requestLoggerMiddleware(c *gin.Context) {
+func (s *GinApi) requestLoggerMiddleware(c *gin.Context) {
 	startTime := time.Now()
 	c.Next()
 	duration := time.Since(startTime)
@@ -76,7 +76,7 @@ func (s *GinService) requestLoggerMiddleware(c *gin.Context) {
 	}).Info("request handled")
 }
 
-func (s *GinService) responseLoggerMiddleware(c *gin.Context) {
+func (s *GinApi) responseLoggerMiddleware(c *gin.Context) {
 	c.Next()
 	s.logger.WithFields(logrus.Fields{
 		"status": c.Writer.Status(),
@@ -84,7 +84,7 @@ func (s *GinService) responseLoggerMiddleware(c *gin.Context) {
 	}).Info("response handled")
 }
 
-func (s *GinService) handleWildcard(c *gin.Context) {
+func (s *GinApi) handleWildcard(c *gin.Context) {
 	path := c.Param("id")
 	switch path {
 	case "/ping":

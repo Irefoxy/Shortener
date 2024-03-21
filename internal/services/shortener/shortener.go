@@ -6,6 +6,7 @@ import (
 	m "Yandex/internal/services/shortener/models"
 	"context"
 	"errors"
+	"fmt"
 	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
@@ -16,12 +17,12 @@ type Generator interface {
 }
 
 type Repo interface {
-	ConnectStorage(ctx context.Context) error
+	ConnectStorage() error
 	Get(ctx context.Context, unit models.Entry) (*models.Entry, error)
 	GetAllByUUID(ctx context.Context, uuid string) ([]models.Entry, error)
 	Set(ctx context.Context, units []models.Entry) error
 	Delete(ctx context.Context, units []models.Entry) error
-	Close(ctx context.Context) error
+	Close() error
 }
 
 type DbRepo interface {
@@ -44,6 +45,14 @@ type Shortener struct {
 	wg          sync.WaitGroup
 	dispatcher  m.DeleteDispatcher
 	context     m.BaseContext
+}
+
+func NewShortener(repo Repo, generator Generator, logger *logrus.Logger) *Shortener {
+	return &Shortener{
+		logger:    logger,
+		repo:      repo,
+		generator: generator,
+	}
 }
 
 func (s *Shortener) Stop() error {
@@ -358,7 +367,7 @@ func convertToType[T any](data any) (result T, err error) {
 func (s *Shortener) checkContext() error {
 	select {
 	case <-s.context.Context.Done():
-		return models.ErrorContextCanceled
+		return fmt.Errorf("service: check context: %w", models.ErrorContextCanceled)
 	default:
 		return nil
 	}

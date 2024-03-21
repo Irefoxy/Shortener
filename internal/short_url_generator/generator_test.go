@@ -16,7 +16,7 @@ func TestParser(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			parser := New()
-			short, err := parser.Generate([]byte(test.original))
+			short, err := parser.Generate(test.original)
 			if err != nil {
 				t.Fatal(err)
 			}

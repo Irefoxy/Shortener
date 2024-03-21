@@ -32,12 +32,13 @@ type Service interface {
 	Delete(ctx context.Context, entries []models.Entry) error
 }
 
-type GinService struct {
-	service  Service
-	cfg      *models.ApiConf
-	logger   *logrus.Logger
-	stopChan chan os.Signal
-	cookie   *cookieEngine
+type GinApi struct {
+	service   Service
+	cfg       *models.ApiConf
+	logger    *logrus.Logger
+	stopChan  chan os.Signal
+	errorChan chan error
+	cookie    *cookieEngine
 }
 
 type cookieEngine struct {
@@ -51,21 +52,22 @@ func newCookieEngine(secretKey string) *cookieEngine {
 		equal: hmac.Equal}
 }
 
-func New(srv Service, cfg *models.ApiConf, logger *logrus.Logger) *GinService {
-	return &GinService{srv, cfg, logger, make(chan os.Signal, 1), newCookieEngine(secret)}
+func New(srv Service, cfg *models.ApiConf, logger *logrus.Logger) *GinApi {
+	return &GinApi{service: srv, cfg: cfg, logger: logger, cookie: newCookieEngine(secret)}
 }
 
-func (s *GinService) Run() error {
+func (s *GinApi) Run() error {
 	r := s.init()
 	srv := &http.Server{
 		Addr:    *s.cfg.HostAddress,
 		Handler: r,
 	}
-	errorChan := make(chan error, 1)
+	s.errorChan = make(chan error, 1)
+	s.stopChan = make(chan os.Signal, 1)
 	go func() {
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			errorChan <- err
-			close(errorChan)
+			s.errorChan <- err
+			close(s.errorChan)
 		}
 	}()
 	signal.Notify(s.stopChan, syscall.SIGINT, syscall.SIGTERM)
@@ -76,22 +78,29 @@ func (s *GinService) Run() error {
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
 			s.logger.Warnf("Server Shutdown Failed:%+v", err)
+			s.errorChan <- err
+			close(s.errorChan)
+			return err
 		}
-		s.logger.Println("Server gracefully stopped")
-	case err := <-errorChan:
+		s.errorChan <- nil
+		s.logger.Info("Server gracefully stopped")
+	case err := <-s.errorChan:
 		s.logger.Warnf("Server Run error:%+v", err)
+		return err
 	}
 	return nil
 }
 
-func (s *GinService) Stop() {
+func (s *GinApi) Stop() error {
 	if s.stopChan != nil {
 		s.stopChan <- syscall.SIGTERM
 		close(s.stopChan)
 	}
+	err := <-s.errorChan
+	return err
 }
 
-func (s *GinService) init() *gin.Engine {
+func (s *GinApi) init() *gin.Engine {
 	r := gin.Default()
 	r.Use(s.errorMiddleware, s.authentication, unzipMiddleware, gzip.Gzip(gzip.DefaultCompression))
 	r.GET("/*"+parameterName, s.responseLoggerMiddleware, checkAuthentication, s.handleWildcard)

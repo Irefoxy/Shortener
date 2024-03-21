@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func (s *GinService) setCookie(c *gin.Context) {
+func (s *GinApi) setCookie(c *gin.Context) {
 	if _, ok := c.Get(cookieName); !ok {
 		cookie := s.cookie.createSignedCookie(cookieName)
 		http.SetCookie(c.Writer, cookie)
@@ -23,7 +23,7 @@ func checkAuthentication(c *gin.Context) {
 	}
 }
 
-func (s *GinService) authentication(c *gin.Context) {
+func (s *GinApi) authentication(c *gin.Context) {
 	if value, err := c.Cookie(cookieName); err == nil {
 		s.logger.Infof("Authentication: %s found: %s for %s", cookieName, value, c.ClientIP())
 		if id, ok := s.cookie.verifyCookie(value); ok {

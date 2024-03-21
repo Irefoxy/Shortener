@@ -41,11 +41,11 @@ func TestConfig(t *testing.T) {
 			cfg.Parse(test.argv[0], test.argv[1:])
 			clearEnvs(t, test.envName)
 
-			if *cfg.GetServiceConf().HostAddress != test.expected[HostAddressName] {
-				t.Errorf("Expected %s: %s, but got %s", HostAddressName, test.expected[HostAddressName], *cfg.GetServiceConf().HostAddress)
+			if *cfg.GetApiConf().HostAddress != test.expected[HostAddressName] {
+				t.Errorf("Expected %s: %s, but got %s", HostAddressName, test.expected[HostAddressName], *cfg.GetApiConf().HostAddress)
 			}
-			if *cfg.GetServiceConf().TargetAddress != test.expected[TargetAddressName] {
-				t.Errorf("Expected %s: %s, but got %s", TargetAddressName, test.expected[TargetAddressName], *cfg.GetServiceConf().TargetAddress)
+			if *cfg.GetApiConf().TargetAddress != test.expected[TargetAddressName] {
+				t.Errorf("Expected %s: %s, but got %s", TargetAddressName, test.expected[TargetAddressName], *cfg.GetApiConf().TargetAddress)
 			}
 			if cfg.GetDatabaseString() != test.expected[DatabaseStringName] {
 				t.Errorf("Expected %s: %s, but got %s", DatabaseStringName, test.expected[DatabaseStringName], cfg.GetDatabaseString())
