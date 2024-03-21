@@ -3,11 +3,12 @@ package in_memory
 import (
 	"Yandex/internal/models"
 	m "Yandex/internal/repo/in_memory/models"
+	"Yandex/internal/services/shortener"
 	"context"
 	"sync"
 )
 
-//var _ shortener.Repo = (*InMemory)(nil)
+var _ shortener.Repo = (*InMemory)(nil)
 
 //go:generate mockgen -source=in_memory.go -package=mocks -destination=./mocks/mock_filestorage.go
 type FileStorage[T any] interface {
@@ -18,7 +19,6 @@ type FileStorage[T any] interface {
 type InMemory struct {
 	data sync.Map
 	file FileStorage[models.Entry]
-	mu   sync.RWMutex
 }
 
 func New(stg FileStorage[models.Entry]) *InMemory {
@@ -27,17 +27,64 @@ func New(stg FileStorage[models.Entry]) *InMemory {
 	}
 }
 
-func (i *InMemory) ConnectStorage() error {
+func (i *InMemory) ConnectStorage(_ context.Context) error {
 	data, err := i.file.LoadAll()
 	if err != nil {
 		return err
 	}
-	return i.addDataToMap(data)
+	i.importData(data)
+	return nil
 }
 
-func (i *InMemory) Close() error {
+func (i *InMemory) Close(_ context.Context) error {
 	data := i.exportData()
 	return i.file.Dump(data)
+}
+
+func (i *InMemory) Get(_ context.Context, entry models.Entry) (*models.Entry, error) {
+	adapter := m.NewEntryAdapter(entry)
+	v, ok := i.data.Load(adapter.Key())
+	if !ok {
+		return nil, nil
+	}
+	result := m.KeyValueToEntry(adapter.Key(), v.(m.Value))
+	return &result, nil
+}
+
+func (i *InMemory) GetAllByUUID(_ context.Context, uuid string) (result []models.Entry, err error) {
+	i.data.Range(func(k, v any) bool {
+		if k.(m.Key).Id() == uuid {
+			result = append(result, m.KeyValueToEntry(k.(m.Key), v.(m.Value)))
+		}
+		return true
+	})
+	return
+}
+
+func (i *InMemory) Set(_ context.Context, entries []models.Entry) (err error) {
+	for _, entry := range entries {
+		adapter := m.NewEntryAdapter(entry)
+		previous, loaded := i.data.Swap(adapter.Key(), adapter.Value())
+		if loaded && !previous.(m.Value).Deleted() {
+			err = models.ErrorConflict
+		}
+	}
+	return
+}
+
+func (i *InMemory) Delete(_ context.Context, entries []models.Entry) error {
+	for _, entry := range entries {
+		adapter := m.NewEntryAdapter(entry)
+		i.data.CompareAndSwap(adapter.Key(), adapter.Value(), adapter.Value().SetDeleted())
+	}
+	return nil
+}
+
+func (i *InMemory) importData(entries []models.Entry) {
+	for _, entry := range entries {
+		adapter := m.NewEntryAdapter(entry)
+		i.data.Store(adapter.Key(), adapter.Value())
+	}
 }
 
 func (i *InMemory) exportData() (exportedData []models.Entry) {
@@ -48,66 +95,4 @@ func (i *InMemory) exportData() (exportedData []models.Entry) {
 		return true
 	})
 	return exportedData
-}
-
-func (i *InMemory) Get(_ context.Context, unit models.Entry) (*models.Entry, error) {
-	adapter := m.NewEntryAdapter(unit)
-	v, ok := i.data.Load(adapter.Key())
-	if !ok {
-		return nil, nil
-	}
-	result := m.KeyValueToEntry(adapter.Key(), v.(m.Value))
-	return &result, nil
-}
-
-func (i *InMemory) GetAllUrlsByUUID(ctx context.Context, uuid string) (result []models.Entry, err error) {
-	i.data.Range(func(k, v any) bool {
-		if k.(key).id == uuid.Id {
-			result = append(result, models.Entry{
-				Id:          uuid.Id,
-				OriginalUrl: k.(key).original,
-				ShortUrl:    v.(string),
-			})
-		}
-		return true
-	})
-	return
-}
-
-func (i *InMemory) Set(ctx context.Context, units []models.Entry) (err error) {
-	for _, unit := range units {
-		err2 := i.Set(ctx, unit)
-		if err2 != nil {
-			err = err2
-		}
-	}
-	return
-}
-
-func (i *InMemory) Set(_ context.Context, units models.Entry) error {
-	_, loaded := i.data.LoadOrStore(key{
-		id:       units.Id,
-		original: units.OriginalUrl,
-	}, units.ShortUrl)
-	if loaded {
-		return models.ErrorConflict
-	}
-	if !i.file.IsOpened() {
-		return nil
-	}
-	return i.file.Write(&units)
-}
-
-func (i *InMemory) Delete(ctx context.Context, units []models.Entry) error {
-
-}
-
-func (i *InMemory) addDataToMap(units []models.Entry) error {
-	for _, unit := range units {
-		i.data.Store(key{
-			id:       unit.Id,
-			original: unit.OriginalUrl,
-		}, unit.ShortUrl)
-	}
-	return nil
 }

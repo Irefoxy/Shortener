@@ -1,6 +1,7 @@
 package in_memory
 
 import (
+	"errors"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -28,7 +29,7 @@ func TestLoad(t *testing.T) {
 	}{
 		{"File name empty", "", nil, nil},
 		{"Not exist", testFileName, os.ErrNotExist, nil},
-		{"Not exist", testSrcEmptyFile, nil, nil},
+		{"Empty", testSrcEmptyFile, nil, nil},
 		{"OK", testSrcFile, nil, []Sample{
 			{
 				Id:     1,
@@ -39,51 +40,66 @@ func TestLoad(t *testing.T) {
 				String: "234",
 			},
 		}},
-		{"OK", testSrcWrongFile, nil, nil},
+		{"Wrong", testSrcWrongFile, errors.New("invalid character '{' after top-level value"), nil},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			storage := NewJSONFileStorage[Sample](test.fileName)
 			data, err := storage.LoadAll()
-			assert.ErrorIs(t, err, test.err)
+			if test.err != nil {
+				assert.Error(t, err)
+				assert.ErrorAs(t, err, &test.err)
+			} else {
+				assert.NoError(t, err)
+			}
 			assert.ElementsMatch(t, data, test.data)
 		})
 	}
 }
 
-/*func TestWrite(t *testing.T) {
+func TestDump(t *testing.T) {
 	tests := []struct {
 		name     string
 		fileName string
 		expected string
-		content  Sample
+		content  []Sample
 		err      error
 	}{
-		{"File name empty", "", "", Sample{}, models.ErrorFileNotOpened},
-		{"OK", testFileName, `{"id":1,"string":"123"}` + "\n", Sample{
-			Id:     1,
-			String: "123",
+		{"File name empty", "", "", nil, nil},
+		{"Create", testFileName, "[{\"id\":1,\"string\":\"123\"},{\"id\":2,\"string\":\"234\"}]\012", []Sample{
+			{
+				Id:     1,
+				String: "123",
+			},
+			{
+				Id:     2,
+				String: "234",
+			},
+		}, nil},
+		{"Overwrite", testFileName, "[{\"id\":3,\"string\":\"555\"}]\012", []Sample{
+			{
+				Id:     3,
+				String: "555",
+			},
 		}, nil},
 	}
-	// Trying to write without Open()
-	number := 0
-	t.Run(tests[number].name, func(t *testing.T) {
-		storage := NewJSONFileStorage[Sample](tests[number].fileName)
-		assert.ErrorIs(t, storage.Write(&tests[number].content), tests[number].err)
-	})
-
-	number = 1
-	t.Run(tests[number].name, func(t *testing.T) {
-		asrt := assert.New(t)
-		storage := NewJSONFileStorage[Sample](tests[number].fileName)
-		asrt.NoError(storage.Open())
-		asrt.NoError(storage.Write(&tests[number].content))
-		data, err := os.ReadFile(tests[number].fileName)
-		asrt.NoError(err)
-		asrt.Equal(string(data), tests[number].expected)
-		asrt.NoError(os.Remove(tests[number].fileName))
-		asrt.NoError(storage.Close())
-		asrt.NoError(storage.Close())
-	})
-}*/
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			storage := NewJSONFileStorage[Sample](test.fileName)
+			err := storage.Dump(test.content)
+			if test.err != nil {
+				assert.Error(t, err)
+				assert.ErrorAs(t, err, &test.err)
+			} else {
+				assert.NoError(t, err)
+			}
+			if test.expected != "" {
+				data, err := os.ReadFile(testFileName)
+				assert.NoError(t, err)
+				assert.Equal(t, string(data), test.expected)
+			}
+		})
+	}
+	assert.NoError(t, os.Remove(testFileName))
+}

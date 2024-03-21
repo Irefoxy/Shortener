@@ -21,7 +21,7 @@ func (i *JSONFileStorage[T]) Dump(data []T) (err error) {
 	if i.isNotSet() || len(data) == 0 {
 		return nil
 	}
-	file, err := os.OpenFile(i.name, os.O_TRUNC|os.O_CREATE, 0755)
+	file, err := os.OpenFile(i.name, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
 	defer file.Close()
 	if err != nil {
 		return err

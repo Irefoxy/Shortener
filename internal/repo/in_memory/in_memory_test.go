@@ -4,226 +4,138 @@ import (
 	"Yandex/internal/models"
 	"Yandex/internal/repo/in_memory/mocks"
 	"context"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 	"testing"
 )
 
-type TestCase struct {
-	Name          string
-	SetupMock     func(*mocks.MockFileStorage[models.Entry])
-	Expected      []models.Entry
-	ExpectedError error
+type testErr string
+
+func (e testErr) Error() string {
+	return string(e)
 }
 
-func TestInit(t *testing.T) {
-	expected := []models.Entry{
-		{
-			Id:          "1",
-			OriginalUrl: "1234",
-			ShortUrl:    "4321",
-		},
-		{
-			Id:          "1",
-			OriginalUrl: "2345",
-			ShortUrl:    "5432",
-		},
-	}
-	testCases := []TestCase{
-		{
-			Name: "Open error",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().Open().Return(models.ErrorFileNameNotGiven)
-			},
-			ExpectedError: models.ErrorFileNameNotGiven,
-		},
-		{
-			Name: "Load error",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().Open().Return(nil)
-				s.EXPECT().LoadAll().Return(nil, models.ErrorFileNotOpened)
-			},
-			ExpectedError: models.ErrorFileNotOpened,
-		},
-		{
-			Name: "OK",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().Open().Return(nil)
-				s.EXPECT().LoadAll().Return(expected, nil)
-			},
-			Expected:      expected,
-			ExpectedError: nil,
-		},
-	}
+const testError testErr = "TEST ERROR"
 
-	ctrl := gomock.NewController(t)
-	storage := mocks.NewMockFileStorage[models.Entry](ctrl)
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			asrt := assert.New(t)
-			testCase.SetupMock(storage)
-			repo := New(storage)
-			err := repo.ConnectStorage(context.Background())
-			asrt.ErrorIs(err, testCase.ExpectedError)
-			if err == nil {
-				data, err := repo.GetAllUrlsByUUID(context.Background(), models.Entry{Id: "1"})
-				asrt.NoError(err)
-				asrt.ElementsMatch(data, expected)
-			}
-		})
-	}
+var entries = []models.Entry{
+	{
+		Id:          "1",
+		OriginalUrl: "yandex.com",
+		ShortUrl:    "yan",
+		DeletedFlag: false,
+	},
+	{
+		Id:          "1",
+		OriginalUrl: "sber.com",
+		ShortUrl:    "sb",
+		DeletedFlag: false,
+	},
+	{
+		Id:          "2",
+		OriginalUrl: "sber.com",
+		ShortUrl:    "sb",
+		DeletedFlag: true,
+	},
 }
 
-func TestSet(t *testing.T) {
-	expected := []models.Entry{
-		{
-			Id:          "1",
-			OriginalUrl: "1234",
-			ShortUrl:    "4321",
-		},
-		{
-			Id:          "1",
-			OriginalUrl: "2345",
-			ShortUrl:    "5432",
-		},
-		{
-			Id:          "1",
-			OriginalUrl: "1345",
-			ShortUrl:    "1432",
-		},
-	}
-	testCases := []TestCase{
-		{
-			Name: "FileStorage not opened",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().IsOpened().Return(false)
-			},
-			Expected:      expected[:1],
-			ExpectedError: nil,
-		},
-		{
-			Name: "Write error",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().IsOpened().Return(true)
-				s.EXPECT().Write(&expected[1]).Return(models.ErrorFileNotOpened)
-			},
-			Expected:      expected[1:2],
-			ExpectedError: models.ErrorFileNotOpened,
-		},
-		{
-			Name: "Conflict error",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-			},
-			Expected:      expected[:1],
-			ExpectedError: models.ErrorConflict,
-		},
-		{
-			Name: "OK",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().IsOpened().Return(true)
-				s.EXPECT().Write(&expected[2]).Return(nil)
-			},
-			Expected:      expected[2:3],
-			ExpectedError: nil,
-		},
-	}
-
-	ctrl := gomock.NewController(t)
-	storage := mocks.NewMockFileStorage[models.Entry](ctrl)
-	repo := New(storage)
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			asrt := assert.New(t)
-			testCase.SetupMock(storage)
-			err := repo.Set(context.Background(), models.Entry{
-				Id:          testCase.Expected[0].Id,
-				OriginalUrl: testCase.Expected[0].OriginalUrl,
-				ShortUrl:    testCase.Expected[0].ShortUrl,
-			})
-			asrt.ErrorIs(err, testCase.ExpectedError)
-			data, err := repo.Get(context.Background(), models.Entry{
-				Id:          testCase.Expected[0].Id,
-				OriginalUrl: testCase.Expected[0].OriginalUrl,
-			})
-			asrt.NoError(err)
-			asrt.Equal(data.ShortUrl, testCase.Expected[0].ShortUrl)
-		})
-	}
+type RepoSuite struct {
+	suite.Suite
+	repo    *InMemory
+	storage *mocks.MockFileStorage[models.Entry]
 }
 
-func TestBatch(t *testing.T) {
-	expected := []models.Entry{
-		{
-			Id:          "1",
-			OriginalUrl: "1234",
-			ShortUrl:    "4321",
-		},
-		{
-			Id:          "1",
-			OriginalUrl: "2345",
-			ShortUrl:    "5432",
-		},
-		{
-			Id:          "1",
-			OriginalUrl: "1345",
-			ShortUrl:    "1432",
-		},
-	}
-	testCases := []TestCase{
-		{
-			Name: "FileStorage not opened",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().IsOpened().Return(false)
-			},
-			Expected:      expected[:1],
-			ExpectedError: nil,
-		},
-		{
-			Name: "Write error",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().IsOpened().Return(true)
-				s.EXPECT().Write(&expected[1]).Return(models.ErrorFileNotOpened)
-			},
-			Expected:      expected[1:2],
-			ExpectedError: models.ErrorFileNotOpened,
-		},
-		{
-			Name: "Conflict error",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-			},
-			Expected:      expected[:1],
-			ExpectedError: models.ErrorConflict,
-		},
-		{
-			Name: "OK",
-			SetupMock: func(s *mocks.MockFileStorage[models.Entry]) {
-				s.EXPECT().IsOpened().Return(true)
-				s.EXPECT().Write(&expected[2]).Return(nil)
-			},
-			Expected:      expected[2:3],
-			ExpectedError: nil,
-		},
-	}
+func (s *RepoSuite) SetupTest() {
+	ctrl := gomock.NewController(s.T())
+	s.storage = mocks.NewMockFileStorage[models.Entry](ctrl)
+	s.repo = New(s.storage)
+}
 
-	ctrl := gomock.NewController(t)
-	storage := mocks.NewMockFileStorage[models.Entry](ctrl)
-	repo := New(storage)
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			asrt := assert.New(t)
-			testCase.SetupMock(storage)
-			err := repo.Set(context.Background(), models.Entry{
-				Id:          testCase.Expected[0].Id,
-				OriginalUrl: testCase.Expected[0].OriginalUrl,
-				ShortUrl:    testCase.Expected[0].ShortUrl,
-			})
-			asrt.ErrorIs(err, testCase.ExpectedError)
-			data, err := repo.Get(context.Background(), models.Entry{
-				Id:          testCase.Expected[0].Id,
-				OriginalUrl: testCase.Expected[0].OriginalUrl,
-			})
-			asrt.NoError(err)
-			asrt.Equal(data.ShortUrl, testCase.Expected[0].ShortUrl)
-		})
-	}
+func (s *RepoSuite) TestExportImport() {
+	s.repo.importData(entries)
+	data := s.repo.exportData()
+	s.ElementsMatch(data, entries)
+}
+
+func (s *RepoSuite) TestFailedConnectAndClose() {
+	s.storage.EXPECT().LoadAll().Return(nil, testError)
+	s.storage.EXPECT().Dump(gomock.Any()).Return(testError)
+	s.Assert().ErrorIs(s.repo.ConnectStorage(context.Background()), testError)
+	s.Assert().ErrorIs(s.repo.Close(context.Background()), testError)
+}
+
+func (s *RepoSuite) TestOKConnect() {
+	s.storage.EXPECT().LoadAll().Return(nil, nil)
+	s.Assert().NoError(s.repo.ConnectStorage(context.Background()))
+}
+
+func (s *RepoSuite) TestSetAndGet00() {
+	err := s.repo.Set(context.Background(), entries)
+	s.NoError(err)
+	got, err := s.repo.Get(context.Background(), models.Entry{
+		Id:          "1",
+		OriginalUrl: "yandex.com",
+	})
+	s.NoError(err)
+	s.Assert().Contains(entries, *got)
+}
+
+func (s *RepoSuite) TestSetAndGet01() {
+	err := s.repo.Set(context.Background(), entries)
+	s.NoError(err)
+	err = s.repo.Set(context.Background(), entries)
+	s.ErrorIs(err, models.ErrorConflict)
+}
+
+func (s *RepoSuite) TestSetAndGet02() {
+	got, err := s.repo.Get(context.Background(), models.Entry{
+		Id:          "1",
+		OriginalUrl: "yandex.com",
+	})
+	s.NoError(err)
+	s.Nil(got)
+}
+
+func (s *RepoSuite) TestSetAndGet03() {
+	err := s.repo.Set(context.Background(), entries)
+	s.NoError(err)
+	err = s.repo.Delete(context.Background(), entries)
+	s.NoError(err)
+	err = s.repo.Set(context.Background(), entries)
+	s.NoError(err)
+}
+
+func (s *RepoSuite) TestDelete00() {
+	err := s.repo.Set(context.Background(), entries)
+	s.NoError(err)
+	err = s.repo.Delete(context.Background(), entries)
+	s.NoError(err)
+	got, err := s.repo.Get(context.Background(), models.Entry{
+		Id:          "1",
+		OriginalUrl: "yandex.com",
+	})
+	s.NoError(err)
+	s.Equal(models.Entry{
+		Id:          "1",
+		OriginalUrl: "yandex.com",
+		ShortUrl:    "yan",
+		DeletedFlag: true,
+	}, *got)
+}
+
+func (s *RepoSuite) TestGetAll00() {
+	entriesForUUID, err := s.repo.GetAllByUUID(context.Background(), "1")
+	s.NoError(err)
+	s.Nil(entriesForUUID)
+}
+
+func (s *RepoSuite) TestGetAll01() {
+	err := s.repo.Set(context.Background(), entries)
+	s.NoError(err)
+	entriesForUUID, err := s.repo.GetAllByUUID(context.Background(), "1")
+	s.NoError(err)
+	s.ElementsMatch(entries[:2], entriesForUUID)
+}
+
+func TestRepoSuite(t *testing.T) {
+	suite.Run(t, new(RepoSuite))
 }

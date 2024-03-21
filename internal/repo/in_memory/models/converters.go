@@ -32,3 +32,16 @@ func KeyValueToEntry(k Key, v Value) models.Entry {
 		DeletedFlag: v.deleted,
 	}
 }
+
+func (k Key) Id() string {
+	return k.id
+}
+
+func (v Value) SetDeleted() Value {
+	v.deleted = true
+	return v
+}
+
+func (v Value) Deleted() bool {
+	return v.deleted
+}
