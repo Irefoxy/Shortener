@@ -5,6 +5,7 @@ import (
 	"Yandex/internal/conf"
 	"Yandex/internal/models"
 	"Yandex/internal/repo/in_memory"
+	"Yandex/internal/repo/postgres"
 	"Yandex/internal/services/shortener"
 	"Yandex/internal/short_url_generator"
 	"github.com/sirupsen/logrus"
@@ -46,10 +47,9 @@ func (p *Provider) Repo() shortener.Repo {
 	if p.repo == nil {
 		if p.cfg.GetDatabaseString() == "" {
 			p.repo = in_memory.New(in_memory.NewJSONFileStorage[models.Entry](p.cfg.GetFileLocation()))
+		} else {
+			p.repo = postgres.New(p.cfg.GetDatabaseString())
 		}
-		//else {
-		//	p.repo = postgres.New(p.cfg.GetDatabaseString())
-		//}
 	}
 	return p.repo
 }
