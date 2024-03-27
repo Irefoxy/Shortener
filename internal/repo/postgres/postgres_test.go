@@ -1,19 +1,25 @@
 package postgres
 
 import (
-	"Yandex/internal/models"
-	"Yandex/internal/repo/in_memory/mocks"
+	"github.com/pashagolub/pgxmock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"testing"
 )
 
 type RepoSuite struct {
 	suite.Suite
-	repo    *Postgres
-	storage *mocks.MockFileStorage[models.Entry]
+	pool    *Postgres
+	storage DbIFace
 }
 
 func (s *RepoSuite) SetupTest() {
-	ctrl := gomock.NewController(s.T())
-	s.storage = mocks.NewMockFileStorage[models.Entry](ctrl)
-	s.repo = New(s.storage)
+	pool, err := pgxmock.NewPool()
+	assert.NoError(s.T(), err)
+	s.storage = pool
+	s.pool = &Postgres{pool: s.storage}
+}
+
+func TestRepoSuite(t *testing.T) {
+	suite.Run(t, new(RepoSuite))
 }

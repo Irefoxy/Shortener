@@ -28,8 +28,10 @@ type Postgres struct {
 }
 
 func New(dsn string) *Postgres {
-	return &Postgres{dsn: dsn,
-		pool: (*pgxpool.Pool)(nil)}
+	return &Postgres{
+		dsn:  dsn,
+		pool: (*pgxpool.Pool)(nil),
+	}
 }
 
 func (p *Postgres) ConnectStorage() error {
@@ -182,8 +184,7 @@ func (p *Postgres) sendBatch(ctx context.Context, prepareBatch func() *pgx.Batch
 	if err != nil {
 		return 0, err
 	}
-	err = tx.Commit(newCtx)
-	return count, err
+	return count, tx.Commit(newCtx)
 }
 
 func execBatch(batch *pgx.Batch, br pgx.BatchResults) (int, error) {
