@@ -6,15 +6,30 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"time"
 )
 
 var _ shortener.Repo = (*Postgres)(nil)
 
+type DbIFace interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Close()
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Ping(ctx context.Context) error
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
 type Postgres struct {
 	dsn  string
-	pool *pgxpool.Pool
+	pool DbIFace
+}
+
+func New(dsn string) *Postgres {
+	return &Postgres{dsn: dsn,
+		pool: (*pgxpool.Pool)(nil)}
 }
 
 func (p *Postgres) ConnectStorage() error {
@@ -32,8 +47,12 @@ func (p *Postgres) ConnectStorage() error {
 
 func (p *Postgres) GetAllByUUID(ctx context.Context, uuid string) (result []models.Entry, err error) {
 	script := `SELECT original, short, deleted FROM urls WHERE uuid=$1`
-	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	newCtx, cancel := prepareContext(ctx, 5)
 	defer cancel()
+	return p.sendGetAllQuery(newCtx, script, uuid)
+}
+
+func (p *Postgres) sendGetAllQuery(newCtx context.Context, script string, uuid string) (result []models.Entry, err error) {
 	rows, err := p.pool.Query(newCtx, script, uuid)
 	if err != nil {
 		return nil, err
@@ -55,64 +74,35 @@ func (p *Postgres) GetAllByUUID(ctx context.Context, uuid string) (result []mode
 	return
 }
 
-func (p *Postgres) Set(ctx context.Context, entries []models.Entry) (err error) {
+func (p *Postgres) Set(ctx context.Context, entries []models.Entry) error {
 	script := `INSERT INTO Urls(uuid, short, original) VALUES ($1, $2, $3)
 		ON CONFLICT(uuid, original) DO NOTHING`
-	newCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	if err := p.Ping(newCtx); err != nil {
+	count, err := p.sendBatch(ctx, func() (batch *pgx.Batch) {
+		batch = new(pgx.Batch)
+		for _, entry := range entries {
+			batch.Queue(script, entry.Id, entry.ShortUrl, entry.OriginalUrl)
+		}
+		return
+	})
+	if err != nil {
 		return err
 	}
-	tx, err := p.pool.Begin(newCtx)
-	if err != nil {
-		return
+	if count != len(entries) {
+		return models.ErrorConflict
 	}
-	defer tx.Rollback(newCtx)
-	batch := pgx.Batch{}
-	for _, entry := range entries {
-		batch.Queue(script, entry.Id, entry.ShortUrl, entry.OriginalUrl)
-	}
-	br := tx.SendBatch(newCtx, &batch)
-	defer br.Close()
-	for i := 0; i < batch.Len(); i++ {
-		tag, err := br.Exec()
-		if err != nil {
-			return
-		}
-		if tag.RowsAffected() != 1 {
-			err = models.ErrorConflict
-		}
-	}
-	err = tx.Commit(newCtx)
-	return
+	return nil
 }
 
 func (p *Postgres) Delete(ctx context.Context, entries []models.Entry) error {
-	script := `UPDATE urls SET deleted = TRUE WHERE id = $1`
-	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := p.Ping(newCtx); err != nil {
-		return err
-	}
-	tx, err := p.pool.Begin(newCtx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(newCtx)
-	batch := pgx.Batch{}
-	for _, entry := range entries {
-		batch.Queue(script, entry.Id)
-	}
-	br := tx.SendBatch(newCtx, &batch)
-	defer br.Close()
-	for i := 0; i < batch.Len(); i++ {
-		_, err := br.Exec()
-		if err != nil {
-			return err
+	script := `UPDATE urls SET deleted = TRUE WHERE id = $1 and short = $2`
+	_, err := p.sendBatch(ctx, func() (batch *pgx.Batch) {
+		batch = new(pgx.Batch)
+		for _, entry := range entries {
+			batch.Queue(script, entry.Id, entry.ShortUrl)
 		}
-	}
-	err = tx.Commit(newCtx)
-	return nil
+		return
+	})
+	return err
 }
 
 func (p *Postgres) Close() error {
@@ -122,14 +112,13 @@ func (p *Postgres) Close() error {
 	return nil
 }
 
-func New(dsn string) *Postgres {
-	return &Postgres{dsn: dsn}
-}
-
 func (p *Postgres) Get(ctx context.Context, entry models.Entry) (*models.Entry, error) {
 	script := `SELECT original, deleted FROM urls WHERE short=$1 and uuid=$2`
-	newCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	newCtx, cancel := prepareContext(ctx, 5)
 	defer cancel()
+	if err := p.Ping(newCtx); err != nil {
+		return nil, err
+	}
 	row := p.pool.QueryRow(newCtx, script, entry.ShortUrl, entry.Id)
 	var original string
 	var deleted bool
@@ -146,12 +135,16 @@ func (p *Postgres) Get(ctx context.Context, entry models.Entry) (*models.Entry, 
 }
 
 func (p *Postgres) Ping(ctx context.Context) error {
-	newCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	newCtx, cancel := prepareContext(ctx, 2)
 	defer cancel()
 	if err := p.pool.Ping(newCtx); err != nil {
 		return err
 	}
 	return nil
+}
+
+func prepareContext(ctx context.Context, duration time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, duration*time.Second)
 }
 
 func (p *Postgres) prepareDb(ctx context.Context) error {
@@ -169,4 +162,38 @@ func (p *Postgres) prepareDb(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (p *Postgres) sendBatch(ctx context.Context, prepareBatch func() *pgx.Batch) (int, error) {
+	newCtx, cancel := prepareContext(ctx, 5)
+	defer cancel()
+	if err := p.Ping(newCtx); err != nil {
+		return 0, err
+	}
+	tx, err := p.pool.Begin(newCtx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(newCtx)
+	batch := prepareBatch()
+	br := tx.SendBatch(newCtx, batch)
+	defer br.Close()
+	count, err := execBatch(batch, br)
+	if err != nil {
+		return 0, err
+	}
+	err = tx.Commit(newCtx)
+	return count, err
+}
+
+func execBatch(batch *pgx.Batch, br pgx.BatchResults) (int, error) {
+	numberOfAffectedRows := 0
+	for i := 0; i < batch.Len(); i++ {
+		tag, err := br.Exec()
+		if err != nil {
+			return 0, err
+		}
+		numberOfAffectedRows += int(tag.RowsAffected())
+	}
+	return numberOfAffectedRows, nil
 }
