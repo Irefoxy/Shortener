@@ -28,6 +28,7 @@ type DbIFace interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 	Ping(ctx context.Context) error
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
 }
 
 type Postgres struct {
@@ -177,32 +178,27 @@ func (p *Postgres) sendBatch(ctx context.Context, prepareBatch func() *pgx.Batch
 	if err := p.Ping(newCtx); err != nil {
 		return 0, err
 	}
-	tx, err := p.pool.Begin(newCtx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback(newCtx)
-	count, err := handleBatch(newCtx, tx, prepareBatch)
-	if err != nil {
-		return 0, err
-	}
-	return count, tx.Commit(newCtx)
-}
-
-func handleBatch(newCtx context.Context, tx pgx.Tx, prepareBatch func() *pgx.Batch) (int, error) {
 	batch := prepareBatch()
-	br := tx.SendBatch(newCtx, batch)
-	defer br.Close()
-	count, err := execBatch(batch, br)
+	count, err := p.handleBatch(newCtx, batch)
 	if err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
-func execBatch(batch *pgx.Batch, br pgx.BatchResults) (int, error) {
+func (p *Postgres) handleBatch(newCtx context.Context, batch *pgx.Batch) (int, error) {
+	br := p.pool.SendBatch(newCtx, batch)
+	defer br.Close()
+	count, err := execBatch(br, batch.Len())
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func execBatch(br pgx.BatchResults, batchLen int) (int, error) {
 	numberOfAffectedRows := 0
-	for i := 0; i < batch.Len(); i++ {
+	for i := 0; i < batchLen; i++ {
 		tag, err := br.Exec()
 		if err != nil {
 			return 0, err

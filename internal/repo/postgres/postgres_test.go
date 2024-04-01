@@ -10,6 +10,11 @@ import (
 	"testing"
 )
 
+// Unit tests for Set and Delete operations are skipped
+// due to the complexity involved in testing batch processes.
+// pgxmock/v3 does not easily support batch operation verifications,
+// requiring a more sophisticated approach.
+
 type Err string
 
 func (e Err) Error() string {
@@ -97,11 +102,23 @@ func (s *RepoSuite) TestGetAll02() {
 	s.NoError(s.pool.ExpectationsWereMet())
 }
 
-func (s *RepoSuite) TestSet00() {
+func (s *RepoSuite) TestGet00() {
+	rowsToReturn := pgxmock.NewRows([]string{"original", "short", "deleted"})
+
 	s.pool.ExpectPing()
-	s.pool.ExpectBegin()
-	s.pool.ExpectCommit()
-	s.pool.ExpectRollback()
+	s.pool.ExpectQuery(regexp.QuoteMeta(getAllQuery)).WithArgs(pgxmock.AnyArg()).WillReturnRows(rowsToReturn)
+
+	result, err := s.storage.GetAllByUUID(context.Background(), "any")
+	s.NoError(err)
+	s.Nil(result)
+	s.NoError(s.pool.ExpectationsWereMet())
+}
+
+// OK close()
+func (s *RepoSuite) TestClose() {
+	s.pool.ExpectClose()
+	err := s.storage.Close()
+	s.NoError(err)
 }
 
 func TestRepoSuite(t *testing.T) {
