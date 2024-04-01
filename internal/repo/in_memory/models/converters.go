@@ -11,24 +11,30 @@ func NewEntryAdapter(entry models.Entry) *EntryAdapter {
 }
 
 func (a EntryAdapter) Key() Key {
+	if a.Id == "" || a.ShortUrl == "" {
+		panic("keys fields can't be zero")
+	}
 	return Key{
-		id:       a.Id,
-		original: a.OriginalUrl,
+		id:    a.Id,
+		short: a.ShortUrl,
 	}
 }
 
 func (a EntryAdapter) Value() Value {
+	if a.OriginalUrl == "" {
+		panic("value fields can't be zero")
+	}
 	return Value{
-		short:   a.ShortUrl,
-		deleted: a.DeletedFlag,
+		original: a.OriginalUrl,
+		deleted:  a.DeletedFlag,
 	}
 }
 
 func KeyValueToEntry(k Key, v Value) models.Entry {
 	return models.Entry{
 		Id:          k.id,
-		OriginalUrl: k.original,
-		ShortUrl:    v.short,
+		OriginalUrl: v.original,
+		ShortUrl:    k.short,
 		DeletedFlag: v.deleted,
 	}
 }

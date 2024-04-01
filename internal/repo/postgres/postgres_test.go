@@ -102,15 +102,49 @@ func (s *RepoSuite) TestGetAll02() {
 	s.NoError(s.pool.ExpectationsWereMet())
 }
 
+// No content
 func (s *RepoSuite) TestGet00() {
-	rowsToReturn := pgxmock.NewRows([]string{"original", "short", "deleted"})
+	rowsToReturn := pgxmock.NewRows([]string{"original", "deleted"})
 
 	s.pool.ExpectPing()
-	s.pool.ExpectQuery(regexp.QuoteMeta(getAllQuery)).WithArgs(pgxmock.AnyArg()).WillReturnRows(rowsToReturn)
+	s.pool.ExpectQuery(regexp.QuoteMeta(getQuery)).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(rowsToReturn)
 
-	result, err := s.storage.GetAllByUUID(context.Background(), "any")
+	result, err := s.storage.Get(context.Background(), models.Entry{Id: "any",
+		ShortUrl: "any"})
 	s.NoError(err)
 	s.Nil(result)
+	s.NoError(s.pool.ExpectationsWereMet())
+}
+
+// Returns Err
+func (s *RepoSuite) TestGet01() {
+	testErr := Err("test")
+	s.pool.ExpectPing()
+	s.pool.ExpectQuery(regexp.QuoteMeta(getQuery)).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnError(testErr)
+
+	result, err := s.storage.Get(context.Background(), models.Entry{Id: "any",
+		ShortUrl: "any"})
+	s.ErrorIs(err, testErr)
+	s.Nil(result)
+	s.NoError(s.pool.ExpectationsWereMet())
+}
+
+// OK
+func (s *RepoSuite) TestGet02() {
+	test := models.Entry{
+		Id:          "1",
+		OriginalUrl: "avito.com",
+		ShortUrl:    "asfasda",
+		DeletedFlag: false,
+	}
+	rowsToReturn := pgxmock.NewRows([]string{"original", "deleted"})
+	rowsToReturn.AddRow(test.OriginalUrl, test.DeletedFlag)
+	s.pool.ExpectPing()
+	s.pool.ExpectQuery(regexp.QuoteMeta(getQuery)).WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).WillReturnRows(rowsToReturn)
+
+	result, err := s.storage.Get(context.Background(), test)
+	s.NoError(err)
+	s.Equal(test, *result)
 	s.NoError(s.pool.ExpectationsWereMet())
 }
 

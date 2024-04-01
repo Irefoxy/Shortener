@@ -1,11 +1,11 @@
 package models
 
 type Key struct {
-	id       string
-	original string
+	id    string
+	short string
 }
 
 type Value struct {
-	short   string
-	deleted bool
+	original string
+	deleted  bool
 }

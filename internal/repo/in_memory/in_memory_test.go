@@ -73,8 +73,8 @@ func (s *RepoSuite) TestSetAndGet00() {
 	s.Equal(len(entries), num)
 	s.NoError(err)
 	got, err := s.repo.Get(context.Background(), models.Entry{
-		Id:          "1",
-		OriginalUrl: "yandex.com",
+		Id:       entries[0].Id,
+		ShortUrl: entries[0].ShortUrl,
 	})
 	s.NoError(err)
 	s.Assert().Contains(entries, *got)
@@ -90,8 +90,8 @@ func (s *RepoSuite) TestSetAndGet01() {
 
 func (s *RepoSuite) TestSetAndGet02() {
 	got, err := s.repo.Get(context.Background(), models.Entry{
-		Id:          "1",
-		OriginalUrl: "yandex.com",
+		Id:       entries[0].Id,
+		ShortUrl: entries[0].ShortUrl,
 	})
 	s.NoError(err)
 	s.Nil(got)
@@ -109,22 +109,20 @@ func (s *RepoSuite) TestSetAndGet03() {
 }
 
 func (s *RepoSuite) TestDelete00() {
+	expectedEntry := entries[0]
+	expectedEntry.DeletedFlag = true
 	num, err := s.repo.Set(context.Background(), entries)
 	s.Equal(len(entries), num)
 	s.NoError(err)
 	err = s.repo.Delete(context.Background(), entries)
 	s.NoError(err)
 	got, err := s.repo.Get(context.Background(), models.Entry{
-		Id:          "1",
-		OriginalUrl: "yandex.com",
+		Id:       entries[0].Id,
+		ShortUrl: entries[0].ShortUrl,
 	})
 	s.NoError(err)
-	s.Equal(models.Entry{
-		Id:          "1",
-		OriginalUrl: "yandex.com",
-		ShortUrl:    "yan",
-		DeletedFlag: true,
-	}, *got)
+
+	s.Equal(expectedEntry, *got)
 }
 
 func (s *RepoSuite) TestGetAll00() {
