@@ -13,6 +13,14 @@ import (
 
 var _ shortener.Repo = (*Postgres)(nil)
 
+const (
+	getAllQuery = `SELECT original, short, deleted FROM urls WHERE uuid=$1`
+	setQuery    = `INSERT INTO Urls(uuid, short, original) VALUES ($1, $2, $3)
+				ON CONFLICT(uuid, original) DO NOTHING`
+	deleteQuery = `UPDATE urls SET deleted = TRUE WHERE id = $1 and short = $2`
+	getQuery    = `SELECT original, deleted FROM urls WHERE short=$1 and uuid=$2`
+)
+
 type DbIFace interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	Close()
@@ -48,13 +56,15 @@ func (p *Postgres) ConnectStorage() error {
 }
 
 func (p *Postgres) GetAllByUUID(ctx context.Context, uuid string) (result []models.Entry, err error) {
-	script := `SELECT original, short, deleted FROM urls WHERE uuid=$1`
 	newCtx, cancel := prepareContext(ctx, 5)
 	defer cancel()
-	return p.sendGetAllQuery(newCtx, script, uuid)
+	return p.sendGetAllQuery(newCtx, getAllQuery, uuid)
 }
 
 func (p *Postgres) sendGetAllQuery(newCtx context.Context, script string, uuid string) (result []models.Entry, err error) {
+	if err := p.Ping(newCtx); err != nil {
+		return nil, err
+	}
 	rows, err := p.pool.Query(newCtx, script, uuid)
 	if err != nil {
 		return nil, err
@@ -76,34 +86,30 @@ func (p *Postgres) sendGetAllQuery(newCtx context.Context, script string, uuid s
 	return
 }
 
-func (p *Postgres) Set(ctx context.Context, entries []models.Entry) error {
-	script := `INSERT INTO Urls(uuid, short, original) VALUES ($1, $2, $3)
-		ON CONFLICT(uuid, original) DO NOTHING`
-	count, err := p.sendBatch(ctx, func() (batch *pgx.Batch) {
+func (p *Postgres) Set(ctx context.Context, entries []models.Entry) (int, error) {
+	createBatch := func() (batch *pgx.Batch) {
 		batch = new(pgx.Batch)
 		for _, entry := range entries {
-			batch.Queue(script, entry.Id, entry.ShortUrl, entry.OriginalUrl)
+			batch.Queue(setQuery, entry.Id, entry.ShortUrl, entry.OriginalUrl)
 		}
 		return
-	})
+	}
+	count, err := p.sendBatch(ctx, createBatch)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if count != len(entries) {
-		return models.ErrorConflict
-	}
-	return nil
+	return count, nil
 }
 
 func (p *Postgres) Delete(ctx context.Context, entries []models.Entry) error {
-	script := `UPDATE urls SET deleted = TRUE WHERE id = $1 and short = $2`
-	_, err := p.sendBatch(ctx, func() (batch *pgx.Batch) {
+	createBatch := func() (batch *pgx.Batch) {
 		batch = new(pgx.Batch)
 		for _, entry := range entries {
-			batch.Queue(script, entry.Id, entry.ShortUrl)
+			batch.Queue(deleteQuery, entry.Id, entry.ShortUrl)
 		}
 		return
-	})
+	}
+	_, err := p.sendBatch(ctx, createBatch)
 	return err
 }
 
@@ -115,13 +121,12 @@ func (p *Postgres) Close() error {
 }
 
 func (p *Postgres) Get(ctx context.Context, entry models.Entry) (*models.Entry, error) {
-	script := `SELECT original, deleted FROM urls WHERE short=$1 and uuid=$2`
 	newCtx, cancel := prepareContext(ctx, 5)
 	defer cancel()
 	if err := p.Ping(newCtx); err != nil {
 		return nil, err
 	}
-	row := p.pool.QueryRow(newCtx, script, entry.ShortUrl, entry.Id)
+	row := p.pool.QueryRow(newCtx, getQuery, entry.ShortUrl, entry.Id)
 	var original string
 	var deleted bool
 	switch err := row.Scan(&original, &deleted); {
@@ -177,6 +182,14 @@ func (p *Postgres) sendBatch(ctx context.Context, prepareBatch func() *pgx.Batch
 		return 0, err
 	}
 	defer tx.Rollback(newCtx)
+	count, err := handleBatch(newCtx, tx, prepareBatch)
+	if err != nil {
+		return 0, err
+	}
+	return count, tx.Commit(newCtx)
+}
+
+func handleBatch(newCtx context.Context, tx pgx.Tx, prepareBatch func() *pgx.Batch) (int, error) {
 	batch := prepareBatch()
 	br := tx.SendBatch(newCtx, batch)
 	defer br.Close()
@@ -184,7 +197,7 @@ func (p *Postgres) sendBatch(ctx context.Context, prepareBatch func() *pgx.Batch
 	if err != nil {
 		return 0, err
 	}
-	return count, tx.Commit(newCtx)
+	return count, nil
 }
 
 func execBatch(batch *pgx.Batch, br pgx.BatchResults) (int, error) {

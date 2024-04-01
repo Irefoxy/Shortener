@@ -42,6 +42,6 @@ func (v Value) SetDeleted() Value {
 	return v
 }
 
-func (v Value) Deleted() bool {
+func (v Value) IsDeleted() bool {
 	return v.deleted
 }

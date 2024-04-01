@@ -103,8 +103,10 @@ func (s *GinApi) Stop() error {
 func (s *GinApi) init() *gin.Engine {
 	r := gin.Default()
 	r.Use(s.errorMiddleware, s.authentication, unzipMiddleware, gzip.Gzip(gzip.DefaultCompression))
+
 	r.GET("/*"+parameterName, s.responseLoggerMiddleware, checkAuthentication, s.handleWildcard)
 	r.DELETE("/api/user/urls", checkAuthentication, s.handleDelete)
+
 	postGroup := r.Group("/", s.requestLoggerMiddleware, s.setCookie)
 	postGroup.POST("/", s.handleUrl)
 	postGroup.POST("/shorten", s.handleJsonUrl)

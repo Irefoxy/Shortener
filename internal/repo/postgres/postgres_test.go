@@ -1,23 +1,107 @@
 package postgres
 
 import (
-	"github.com/pashagolub/pgxmock"
+	"Yandex/internal/models"
+	"context"
+	"github.com/pashagolub/pgxmock/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"regexp"
 	"testing"
 )
 
+type Err string
+
+func (e Err) Error() string {
+	return string(e)
+}
+
 type RepoSuite struct {
 	suite.Suite
-	pool    *Postgres
-	storage DbIFace
+	pool    pgxmock.PgxPoolIface
+	storage *Postgres
 }
 
 func (s *RepoSuite) SetupTest() {
-	pool, err := pgxmock.NewPool()
+	var err error
+	s.pool, err = pgxmock.NewPool()
 	assert.NoError(s.T(), err)
-	s.storage = pool
-	s.pool = &Postgres{pool: s.storage}
+	s.storage = &Postgres{pool: s.pool}
+}
+
+// OK case of 3 elements
+func (s *RepoSuite) TestGetAll00() {
+	test := struct {
+		uuid     string
+		expected []models.Entry
+	}{
+		uuid: "1",
+		expected: []models.Entry{
+			{
+				Id:          "1",
+				OriginalUrl: "yandex.com",
+				ShortUrl:    "asdfs",
+				DeletedFlag: true,
+			},
+			{
+				Id:          "1",
+				OriginalUrl: "sber.com",
+				ShortUrl:    "reqweq",
+				DeletedFlag: false,
+			},
+			{
+				Id:          "1",
+				OriginalUrl: "avito.com",
+				ShortUrl:    "ggfasa",
+				DeletedFlag: false,
+			},
+		},
+	}
+	rowsToReturn := pgxmock.NewRows([]string{"original", "short", "deleted"})
+	for _, entry := range test.expected {
+		rowsToReturn.AddRow(entry.OriginalUrl, entry.ShortUrl, entry.DeletedFlag)
+	}
+
+	s.pool.ExpectPing()
+	s.pool.ExpectQuery(regexp.QuoteMeta(getAllQuery)).WithArgs(test.uuid).WillReturnRows(rowsToReturn)
+
+	result, err := s.storage.GetAllByUUID(context.Background(), test.uuid)
+	s.NoError(err)
+	s.ElementsMatch(test.expected, result)
+	s.NoError(s.pool.ExpectationsWereMet())
+}
+
+// OK case of 0 elements
+func (s *RepoSuite) TestGetAll01() {
+	rowsToReturn := pgxmock.NewRows([]string{"original", "short", "deleted"})
+
+	s.pool.ExpectPing()
+	s.pool.ExpectQuery(regexp.QuoteMeta(getAllQuery)).WithArgs(pgxmock.AnyArg()).WillReturnRows(rowsToReturn)
+
+	result, err := s.storage.GetAllByUUID(context.Background(), "any")
+	s.NoError(err)
+	s.Nil(result)
+	s.NoError(s.pool.ExpectationsWereMet())
+}
+
+// Returns Err
+func (s *RepoSuite) TestGetAll02() {
+	testErr := Err("test")
+
+	s.pool.ExpectPing()
+	s.pool.ExpectQuery(regexp.QuoteMeta(getAllQuery)).WithArgs(pgxmock.AnyArg()).WillReturnError(testErr)
+
+	result, err := s.storage.GetAllByUUID(context.Background(), "any")
+	s.ErrorIs(err, testErr)
+	s.Nil(result)
+	s.NoError(s.pool.ExpectationsWereMet())
+}
+
+func (s *RepoSuite) TestSet00() {
+	s.pool.ExpectPing()
+	s.pool.ExpectBegin()
+	s.pool.ExpectCommit()
+	s.pool.ExpectRollback()
 }
 
 func TestRepoSuite(t *testing.T) {

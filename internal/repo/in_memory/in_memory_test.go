@@ -34,7 +34,7 @@ var entries = []models.Entry{
 		Id:          "2",
 		OriginalUrl: "sber.com",
 		ShortUrl:    "sb",
-		DeletedFlag: true,
+		DeletedFlag: false,
 	},
 }
 
@@ -69,7 +69,8 @@ func (s *RepoSuite) TestOKConnect() {
 }
 
 func (s *RepoSuite) TestSetAndGet00() {
-	err := s.repo.Set(context.Background(), entries)
+	num, err := s.repo.Set(context.Background(), entries)
+	s.Equal(len(entries), num)
 	s.NoError(err)
 	got, err := s.repo.Get(context.Background(), models.Entry{
 		Id:          "1",
@@ -80,10 +81,11 @@ func (s *RepoSuite) TestSetAndGet00() {
 }
 
 func (s *RepoSuite) TestSetAndGet01() {
-	err := s.repo.Set(context.Background(), entries)
+	num, err := s.repo.Set(context.Background(), entries)
+	s.Equal(len(entries), num)
 	s.NoError(err)
-	err = s.repo.Set(context.Background(), entries)
-	s.ErrorIs(err, models.ErrorConflict)
+	num, err = s.repo.Set(context.Background(), entries)
+	s.Equal(0, num)
 }
 
 func (s *RepoSuite) TestSetAndGet02() {
@@ -96,16 +98,19 @@ func (s *RepoSuite) TestSetAndGet02() {
 }
 
 func (s *RepoSuite) TestSetAndGet03() {
-	err := s.repo.Set(context.Background(), entries)
+	num, err := s.repo.Set(context.Background(), entries)
+	s.Equal(len(entries), num)
 	s.NoError(err)
 	err = s.repo.Delete(context.Background(), entries)
 	s.NoError(err)
-	err = s.repo.Set(context.Background(), entries)
+	num, err = s.repo.Set(context.Background(), entries)
+	s.Equal(len(entries), num)
 	s.NoError(err)
 }
 
 func (s *RepoSuite) TestDelete00() {
-	err := s.repo.Set(context.Background(), entries)
+	num, err := s.repo.Set(context.Background(), entries)
+	s.Equal(len(entries), num)
 	s.NoError(err)
 	err = s.repo.Delete(context.Background(), entries)
 	s.NoError(err)
@@ -129,7 +134,7 @@ func (s *RepoSuite) TestGetAll00() {
 }
 
 func (s *RepoSuite) TestGetAll01() {
-	err := s.repo.Set(context.Background(), entries)
+	_, err := s.repo.Set(context.Background(), entries)
 	s.NoError(err)
 	entriesForUUID, err := s.repo.GetAllByUUID(context.Background(), "1")
 	s.NoError(err)

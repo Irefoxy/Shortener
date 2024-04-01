@@ -61,12 +61,12 @@ func (i *InMemory) GetAllByUUID(_ context.Context, uuid string) (result []models
 	return
 }
 
-func (i *InMemory) Set(_ context.Context, entries []models.Entry) (err error) {
+func (i *InMemory) Set(_ context.Context, entries []models.Entry) (num int, err error) {
 	for _, entry := range entries {
 		adapter := m.NewEntryAdapter(entry)
 		previous, loaded := i.data.Swap(adapter.Key(), adapter.Value())
-		if loaded && !previous.(m.Value).Deleted() {
-			err = models.ErrorConflict
+		if !loaded || previous.(m.Value).IsDeleted() {
+			num++
 		}
 	}
 	return

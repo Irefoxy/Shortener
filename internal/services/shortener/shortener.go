@@ -18,10 +18,10 @@ type Generator interface {
 
 type Repo interface {
 	ConnectStorage() error
-	Get(ctx context.Context, unit models.Entry) (*models.Entry, error)
+	Get(ctx context.Context, entry models.Entry) (*models.Entry, error)
 	GetAllByUUID(ctx context.Context, uuid string) ([]models.Entry, error)
-	Set(ctx context.Context, units []models.Entry) error
-	Delete(ctx context.Context, units []models.Entry) error
+	Set(ctx context.Context, entries []models.Entry) (int, error)
+	Delete(ctx context.Context, entries []models.Entry) error
 	Close() error
 }
 
@@ -142,7 +142,7 @@ func (s *Shortener) add(ctx context.Context, entries []models.Entry) (result []m
 		if err = s.generateAndAddShortURLS(entries); err != nil {
 			return nil, err
 		}
-		if err = s.repo.Set(ctx, entries); err != nil && !errors.Is(err, models.ErrorConflict) {
+		if _, err = s.repo.Set(ctx, entries); err != nil && !errors.Is(err, models.ErrorConflict) {
 			return nil, err
 		}
 		return entries, err
