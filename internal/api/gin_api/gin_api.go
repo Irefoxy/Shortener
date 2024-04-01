@@ -22,6 +22,7 @@ const secret = "server" // TODO change to config
 const cookieName = "userID"
 const parameterName = "id"
 
+//go:generate mockgen -source=gin_api.go -package=mocks -destination=./mocks/mock_gin_api.go
 type Service interface {
 	Run() error
 	Stop() error

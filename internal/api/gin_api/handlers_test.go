@@ -1,112 +1,94 @@
 package gin_api
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/stretchr/testify/mock"
+	"Yandex/internal/api/gin_api/mocks"
+	"Yandex/internal/models"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
 
-// add init
-type MockRepo struct {
-	mock.Mock
+type ApiSuite struct {
+	suite.Suite
+	api *GinApi
+	srv Service
+	w   *httptest.ResponseRecorder
 }
 
-func (m *MockRepo) Get(hash string) (string, bool) {
-	args := m.Called(hash)
-	return args.String(0), args.Bool(1)
+func (s *ApiSuite) SetupTest() {
+	ctrl := gomock.NewController(s.T())
+	s.w = httptest.NewRecorder()
+	s.srv = mocks.NewMockService(ctrl)
+
+	logger := &logrus.Logger{
+		Out:       os.Stdout,
+		Formatter: new(logrus.TextFormatter),
+		Hooks:     make(logrus.LevelHooks),
+		Level:     logrus.InfoLevel,
+	}
+	s.api = New(s.srv, &models.ApiConf{}, logger)
 }
-func (m *MockRepo) Set(_, _ string) error {
+
+func (s *ApiSuite) produceRequest(method, url, contentType string, reader io.Reader) error {
+	req, err := http.NewRequest(method, url, reader)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", contentType)
+	router := s.api.init()
+	router.ServeHTTP(s.w, req)
 	return nil
 }
 
-type MockEngine struct {
-	mock.Mock
+func (s *ApiSuite) TestInvalidURLHandler_EmptyBody() {
+	err := s.produceRequest("POST", "/", "text/plain", nil)
+	s.NoError(err)
+	s.Equal(http.StatusBadRequest, s.w.Code)
+	s.Equal("Error: empty body", s.w.Body.String())
 }
 
-func (m *MockEngine) Get(url string) (string, error) {
-	args := m.Called(url)
-	return args.String(0), args.Error(1)
+func (s *ApiSuite) TestInvalidURLHandler_WrongPath() {
+	err := s.produceRequest("POST", "/test", "text/plain", nil)
+	s.NoError(err)
+	s.Equal(http.StatusNotFound, s.w.Code)
+	s.Equal("404 page not found", s.w.Body.String())
 }
 
-func initMock() *GinApi {
-	mockRepo := new(MockRepo)
-	mockEngine := new(MockEngine)
-
-	mockRepo.On("Generate", "3JRsVv5L").Return("https://yandex.ru", true)
-	mockRepo.On("Generate", "asd").Return("", false)
-
-	mockEngine.On("Generate", "https://yandex.ru").Return("3JRsVv5L", nil)
-	return &GinApi{
-		repo:   mockRepo,
-		parser: mockEngine,
-	}
+func (s *ApiSuite) TestInvalidURLHandler_WrongContentType() {
+	err := s.produceRequest("POST", "/", "html", strings.NewReader("https://yandex.ru"))
+	s.NoError(err)
+	s.Equal(http.StatusBadRequest, s.w.Code)
+	s.Equal("Error: wrong content-type", s.w.Body.String())
 }
 
-func getRouter() *gin.Engine {
-	srv := initMock()
-	gin.SetMode(gin.TestMode)
-
-	router := gin.Default()
-	router.Use(srv.errorMiddleware)
-	router.POST("/", srv.checkRequest, srv.handleUrl)
-	router.GET("/*id", srv.handleRedirect)
-	return router
+func (s *ApiSuite) TestValidURLHandler() {
+	err := s.produceRequest("POST", "/", "text/plain", strings.NewReader("https://yandex.ru"))
+	s.NoError(err)
+	s.Equal(http.StatusCreated, s.w.Code)
+	s.Equal("http://localhost:8888/3JRsVv5L", s.w.Body.String())
 }
 
-func produceRequest(method, url, contentType string, reader io.Reader) (*httptest.ResponseRecorder, error) {
-	req, err := http.NewRequest(method, url, reader)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", contentType)
-	router := getRouter()
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	return w, nil
+func (s *ApiSuite) TestInvalidRedirectHandler() {
+	err := s.produceRequest("GET", "/asd", "text/plain", nil)
+	s.NoError(err)
+	s.Equal(http.StatusBadRequest, s.w.Code)
+	s.Equal("Error: no such short url", s.w.Body.String())
 }
 
-func TestEndpoints(t *testing.T) {
-	testCases := []struct {
-		name         string
-		method       string
-		url          string
-		contentType  string
-		body         io.Reader
-		expectedCode int
-		expectedBody string
-	}{
-		{"Invalid URL Handler - Empty Body", "POST", "/", "text/plain", nil, http.StatusBadRequest, "Error: empty body"},
-		{"Invalid URL Handler - Wrong Path", "POST", "/test", "text/plain", nil, http.StatusNotFound, "404 page not found"},
-		{"Invalid URL Handler - Wrong ContentType", "POST", "/", "html", strings.NewReader("https://yandex.ru"), http.StatusBadRequest, "Error: wrong content-type"},
-		{"Valid URL Handler", "POST", "/", "text/plain", strings.NewReader("https://yandex.ru"), http.StatusCreated, "http://localhost:8888/3JRsVv5L"},
-		{"Invalid Redirect Handler", "GET", "/asd", "text/plain", nil, http.StatusBadRequest, "Error: no such short url"},
-		{"Valid Redirect Handler", "GET", "/3JRsVv5L", "text/plain", nil, http.StatusTemporaryRedirect, ""},
-	}
+func (s *ApiSuite) TestValidRedirectHandler() {
+	err := s.produceRequest("GET", "/3JRsVv5L", "text/plain", nil)
+	s.NoError(err)
+	s.Equal(http.StatusTemporaryRedirect, s.w.Code)
+	location := s.w.Header().Get("Location")
+	s.Equal("https://yandex.ru", location)
+}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			response, err := produceRequest(tc.method, tc.url, tc.contentType, tc.body)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if response.Code != tc.expectedCode {
-				t.Errorf("Expected status code %d, but got %d", tc.expectedCode, response.Code)
-			}
-
-			if tc.expectedBody != "" && response.Body.String() != tc.expectedBody {
-				t.Errorf("Expected body '%s', but got '%s'", tc.expectedBody, response.Body.String())
-			}
-
-			if tc.name == "Valid Redirect Handler" {
-				if location := response.Header().Get("Location"); location != "https://yandex.ru" {
-					t.Errorf("Expected location 'https://yandex.ru', but got '%s'", location)
-				}
-			}
-		})
-	}
+func TestRepoSuite(t *testing.T) {
+	suite.Run(t, new(ApiSuite))
 }

@@ -11,9 +11,6 @@ func NewEntryAdapter(entry models.Entry) *EntryAdapter {
 }
 
 func (a EntryAdapter) Key() Key {
-	if a.Id == "" || a.ShortUrl == "" {
-		panic("keys fields can't be zero")
-	}
 	return Key{
 		id:    a.Id,
 		short: a.ShortUrl,
@@ -21,9 +18,6 @@ func (a EntryAdapter) Key() Key {
 }
 
 func (a EntryAdapter) Value() Value {
-	if a.OriginalUrl == "" {
-		panic("value fields can't be zero")
-	}
 	return Value{
 		original: a.OriginalUrl,
 		deleted:  a.DeletedFlag,

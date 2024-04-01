@@ -41,7 +41,6 @@ func (i *InMemory) Close() error {
 	return i.file.Dump(data)
 }
 
-// TODO wrong key's second part, needs validator
 func (i *InMemory) Get(_ context.Context, entry models.Entry) (*models.Entry, error) {
 	adapter := m.NewEntryAdapter(entry)
 	v, ok := i.data.Load(adapter.Key())
